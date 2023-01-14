@@ -40,8 +40,7 @@ fn vs_main(vert: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let dist = length(in.fuv);
-    let circle = smoothstep(1.0, 0.9, dist);
+    let circle = smoothstep(1.0, 0.0, length(in.fuv));
     
     return vec4<f32>(in.fcolor, circle);
 }

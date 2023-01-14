@@ -1,7 +1,10 @@
 extern crate nalgebra_glm as glm;
 
+use egui::{FullOutput, ClippedPrimitive};
 use winit::window::Window;
 use wgpu::util::DeviceExt;
+
+use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -41,13 +44,6 @@ impl Vertex {
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-
-                // Color
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                }
             ]
         }
     }
@@ -119,22 +115,26 @@ pub struct Renderer {
     surface: wgpu::Surface,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
+    pub scale_factor: f64,
 
     pipeline: wgpu::RenderPipeline,
 
     vertex_buffer: wgpu::Buffer,
     index_buffer:  wgpu::Buffer,
 
-    instances: Vec<Instance>,
+    instances: Vec<InstanceRaw>,
     instance_buffer: wgpu::Buffer,
 
     colors_buffer: wgpu::Buffer,
     colors_bind_group: wgpu::BindGroup,
+
+    egui_render_pass: RenderPass,
 }
 
 impl Renderer {
     pub async fn new(window: &Window, colors: &Vec<glm::Vec3>) -> Self {
         let size = window.inner_size();
+        let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(wgpu::Backends::DX12 | wgpu::Backends::VULKAN | wgpu::Backends::METAL);
 
@@ -303,6 +303,9 @@ impl Renderer {
             ],
             label: Some("Colors Bind Group"),
         });
+    
+        // We use the egui_wgpu_backend crate as the render backend.
+        let egui_render_pass = RenderPass::new(&device, config.format, 1);
 
         Self {
             device,
@@ -311,6 +314,7 @@ impl Renderer {
             surface,
             config,
             size,
+            scale_factor,
 
             pipeline,
 
@@ -321,7 +325,9 @@ impl Renderer {
             instance_buffer,
 
             colors_buffer,
-            colors_bind_group
+            colors_bind_group,
+
+            egui_render_pass
         }
     }
 
@@ -330,24 +336,37 @@ impl Renderer {
     }
 
     pub fn enqueue_instance(&mut self, instance: Instance) {
-        self.instances.push(instance);
+        self.instances.push(instance.to_raw());
+    }
+ 
+    pub fn update_colors(&mut self, colors: &Vec<glm::Vec3>) {
+        let mut colors_data = vec![ColorRaw{color: [0.0; 4]}; MAX_COLORS];
+
+        for i in 0..colors.len() {
+            let c = colors[i];
+            colors_data[i] = ColorRaw{color: [c.x, c.y, c.z, 0.0]};
+        }
+
+        let encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("update_colors_encoder"),
+        });
+
+        self.queue.write_buffer(&self.colors_buffer, 0, bytemuck::cast_slice(&colors_data));
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
         if new_size.width > 0 && new_size.height > 0 {
-
             self.size = new_size;
+            self.scale_factor = scale_factor;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         }
     }
 
-    pub fn render(&mut self, proj_view: glm::Mat4) -> Result<(), wgpu::SurfaceError> {
-
-        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-
-        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
+    pub fn render(&mut self, proj_view: glm::Mat4, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
 
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default()); 
@@ -385,12 +404,58 @@ impl Renderer {
             
             render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{proj_view: proj_view.into()}));
 
-            render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as _);
+            render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as u32);
         }
-
+    
+        let start = std::time::Instant::now();
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        output.present();
+        let gui_enabled = frame_data.is_some();
+
+        if gui_enabled {
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("EGUI Encoder"),
+            });
+
+            let screen_descriptor = ScreenDescriptor {
+                physical_width: self.config.width,
+                physical_height: self.config.height,
+                scale_factor: self.scale_factor as f32,
+            };
+    
+            let (full_output, paint_jobs) = frame_data.unwrap();
+    
+            self.egui_render_pass.add_textures(&self.device, &self.queue, &full_output.textures_delta).unwrap();
+    
+            self.egui_render_pass.update_buffers(&self.device, &self.queue, &paint_jobs, &screen_descriptor);
+    
+
+            self.egui_render_pass.execute(
+                &mut encoder,
+                &view,
+                &paint_jobs,
+                &screen_descriptor,
+                None,
+            )
+            .unwrap();
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+
+            output.present();
+
+            self.egui_render_pass.remove_textures(full_output.textures_delta).unwrap(); 
+        } else {
+            output.present();
+        }
+
+
+
+
+
+        let submit = start.elapsed().as_secs_f64()*1000.0;
+        println!("GPU took: {:.2}ms", submit);
+
+        self.reset_queue();
 
         Ok(())
     }

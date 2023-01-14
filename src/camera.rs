@@ -7,10 +7,10 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(size_x: f32, size_y: f32) -> Self {
+    pub fn new() -> Self {
         Self {
-            position: glm::Vec2::new(0.0, 0.0),
-            size: glm::Vec2::new(size_x, size_y),
+            position: glm::Vec2::zeros(),
+            size: glm::Vec2::zeros(),
             zoom: 1.0
         }
     }
