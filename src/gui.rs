@@ -64,7 +64,6 @@ impl GUI {
                 ui.heading("Wrapping");
 
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::None, "None");
                     ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
                     ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
                 });

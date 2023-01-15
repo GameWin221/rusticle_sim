@@ -8,10 +8,6 @@ use winit::{
     dpi::LogicalSize
 };
 
-use std::{time::Instant, f32::consts::PI};
-
-use rayon::prelude::*;
-
 use rand::Rng;
 
 mod particle;
@@ -19,18 +15,15 @@ mod gui;
 mod camera;
 mod renderer;
 mod controller;
-
+mod world;
 mod particle_settings;
 
-use particle::Particle;
+use world::World;
 use particle_settings::{ParticleSettings, ParticleWrapping};
 use gui::GUI;
 use camera::Camera;
 use renderer::{Renderer, MAX_INSTANCES, MAX_COLORS};
 use controller::Controller;
-
-const MAX_WIDTH: f32 = 2500.0;
-const MAX_HEIGHT: f32 = 2500.0;
 
 struct Game {
     renderer: Renderer,
@@ -40,7 +33,8 @@ struct Game {
     delta_time: f32,
     last_frame_time: std::time::SystemTime,
 
-    particles: Vec<Particle>,
+    //particles: Vec<Particle>,
+    world: World,
     particle_settings: ParticleSettings, 
 
     show_ui: bool
@@ -84,11 +78,10 @@ impl Game {
             ],
         ];
 
-        let colors = pallettes[1].clone();
+        let colors = pallettes[2].clone();
         
         assert!(colors.len() < MAX_COLORS);
 
-        let particles = Self::new_particles(colors.len());
         let color_table = Self::new_color_table(colors.len());
 
         let particle_settings = ParticleSettings { 
@@ -102,6 +95,8 @@ impl Game {
             wrapping: ParticleWrapping::Barrier,
         };
 
+        let world = World::new(2500.0, particle_settings.max_r, MAX_INSTANCES);
+
         let renderer = Renderer::new(window, &particle_settings.colors).await;
 
         println!("Game initialized!");
@@ -114,7 +109,7 @@ impl Game {
             delta_time: 0.0,
             last_frame_time: std::time::SystemTime::now(),
 
-            particles,
+            world,
             particle_settings,
 
             show_ui: true
@@ -161,71 +156,19 @@ impl Game {
         }
 
         if self.controller.is_key_pressed(VirtualKeyCode::R) {
-            self.particles = Self::new_particles(self.particle_settings.colors.len());
+            self.world.gen_particles(self.particle_settings.colors.len());
         }
         if self.controller.is_key_pressed(VirtualKeyCode::T) {
             self.particle_settings.color_table = Self::new_color_table(self.particle_settings.colors.len());
         }
 
-        let other_particles = self.particles.clone();
+        self.world.update_partitions();
 
-        let start = Instant::now();
-
-        self.particles.par_iter_mut().for_each(|p| {
-            p.velocity *= self.particle_settings.drag.powf(self.delta_time);
-
-            for other in &other_particles {
-                let diff: glm::Vec2 = other.position - p.position;
-                let dist: f32 = (diff.x*diff.x+diff.y*diff.y).sqrt();
-
-                if dist < 0.0001 || dist > self.particle_settings.max_r {
-                    continue;
-                } 
-
-                let dir: glm::Vec2 = glm::Vec2::new(diff.x / dist, diff.y / dist);
-
-                // https://www.desmos.com/calculator/yacrclthei?lang=pl
-                if dist > self.particle_settings.min_r {
-                    let c = self.particle_settings.color_table[p.color_id as usize][other.color_id as usize];
-                    p.velocity += self.particle_settings.force * dir * c * ((PI*(dist - self.particle_settings.min_r)) / (self.particle_settings.max_r - self.particle_settings.min_r)).sin();
-                } else {
-                    p.velocity += self.particle_settings.force * dir * (dist / self.particle_settings.min_r - 1.0);
-                }
-            }
-        });
-
-        let velocity_update = start.elapsed().as_secs_f64()*1000.0;
-
-        let start = Instant::now();
-
-        for particle in &mut self.particles {
-            particle.position += particle.velocity * self.delta_time;
-
-            match self.particle_settings.wrapping {
-                ParticleWrapping::None => {}
-                ParticleWrapping::Wrap => {
-                    if particle.position.x.abs() > MAX_WIDTH {
-                        particle.position.x = -particle.position.x;
-                    }
-
-                    if particle.position.y.abs() > MAX_HEIGHT {
-                        particle.position.y = -particle.position.y;
-                    }
-                }
-                ParticleWrapping::Barrier => {
-                    particle.position.x = particle.position.x.clamp(-MAX_WIDTH, MAX_WIDTH);
-                    particle.position.y = particle.position.y.clamp(-MAX_HEIGHT, MAX_HEIGHT);
-                }
-            }
-        }
-
-        let position_update = start.elapsed().as_secs_f64()*1000.0;
-
-        print!("Physics update took: {:.2}ms (velocity update: {:.2}ms, position update: {:.2}ms) ", velocity_update + position_update, velocity_update, position_update);
+        self.world.update_particles(self.delta_time, &self.particle_settings);
     }
 
     fn render(&mut self, gui: &mut GUI) -> Result<(), wgpu::SurfaceError> {
-        for particle in &self.particles {
+        for particle in self.world.get_particles() {
             self.renderer.enqueue_instance(renderer::Instance {
                 position: particle.position,
                 radius: self.particle_settings.radius,
@@ -234,7 +177,15 @@ impl Game {
         }
 
         let frame_data = if self.show_ui {
-            gui.draw_ui(&mut self.particle_settings)
+            let old_max_r = self.particle_settings.max_r;
+
+            let data = gui.draw_ui(&mut self.particle_settings);
+
+            if old_max_r != self.particle_settings.max_r {
+                self.world.gen_partitions(2500.0, self.particle_settings.max_r);
+            }
+
+            data
         } else {
             None
         };
@@ -249,18 +200,6 @@ impl Game {
             (0..color_count).map(|_| {
                 rand::thread_rng().gen_range(-1.0..=1.0)
             }).collect()
-        }).collect()
-    }
-
-    fn new_particles(color_count: usize) -> Vec<Particle> {
-        (0..MAX_INSTANCES).map(|_| {
-            Particle::new(
-                glm::Vec2::new(
-                    rand::thread_rng().gen_range(-MAX_WIDTH ..=MAX_WIDTH ) / 2.0 + rand::thread_rng().gen_range(-MAX_WIDTH ..=MAX_WIDTH ) / 2.0,
-                    rand::thread_rng().gen_range(-MAX_HEIGHT..=MAX_HEIGHT) / 2.0 + rand::thread_rng().gen_range(-MAX_HEIGHT..=MAX_HEIGHT) / 2.0
-                ), 
-                rand::thread_rng().gen_range(0..color_count as u8)
-            )
         }).collect()
     }
 }

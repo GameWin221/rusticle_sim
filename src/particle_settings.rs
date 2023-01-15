@@ -5,7 +5,6 @@ pub enum ParticleWrapping {
     #[default]
     Barrier,
     Wrap,
-    None,
 }
 
 #[derive(Clone, Default, Debug)]

@@ -448,11 +448,8 @@ impl Renderer {
             output.present();
         }
 
-
-
-
-
         let submit = start.elapsed().as_secs_f64()*1000.0;
+
         println!("GPU took: {:.2}ms", submit);
 
         self.reset_queue();
