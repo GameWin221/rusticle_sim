@@ -1,5 +1,7 @@
 extern crate nalgebra_glm as glm;
 
+use std::time::Instant;
+
 use egui::{FullOutput, ClippedPrimitive};
 use winit::window::Window;
 use wgpu::util::DeviceExt;
@@ -29,7 +31,7 @@ const INDICES: &[u32] = &[
     3, 1, 2,
 ];
 
-pub const MAX_INSTANCES: usize = 10000;//4096;
+pub const MAX_INSTANCES: usize = 4096*3;//4096*4;//4096;
 pub const MAX_COLORS: usize = 32;
 
 impl Vertex {
@@ -406,17 +408,10 @@ impl Renderer {
 
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as u32);
         }
-    
-        let start = std::time::Instant::now();
-        self.queue.submit(std::iter::once(encoder.finish()));
 
-        let gui_enabled = frame_data.is_some();
+        let start;
 
-        if gui_enabled {
-            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("EGUI Encoder"),
-            });
-
+        if frame_data.is_some() {
             let screen_descriptor = ScreenDescriptor {
                 physical_width: self.config.width,
                 physical_height: self.config.height,
@@ -426,9 +421,7 @@ impl Renderer {
             let (full_output, paint_jobs) = frame_data.unwrap();
     
             self.egui_render_pass.add_textures(&self.device, &self.queue, &full_output.textures_delta).unwrap();
-    
             self.egui_render_pass.update_buffers(&self.device, &self.queue, &paint_jobs, &screen_descriptor);
-    
 
             self.egui_render_pass.execute(
                 &mut encoder,
@@ -436,15 +429,16 @@ impl Renderer {
                 &paint_jobs,
                 &screen_descriptor,
                 None,
-            )
-            .unwrap();
+            ).unwrap();
 
+            start = Instant::now();
             self.queue.submit(std::iter::once(encoder.finish()));
-
             output.present();
 
             self.egui_render_pass.remove_textures(full_output.textures_delta).unwrap(); 
         } else {
+            start = Instant::now();
+            self.queue.submit(std::iter::once(encoder.finish()));
             output.present();
         }
 

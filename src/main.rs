@@ -23,7 +23,7 @@ use particle_settings::{ParticleSettings, ParticleWrapping};
 use gui::GUI;
 use camera::Camera;
 use renderer::{Renderer, MAX_INSTANCES, MAX_COLORS};
-use controller::Controller;
+use controller::{Controller, Key};
 
 struct Game {
     renderer: Renderer,
@@ -44,7 +44,7 @@ impl Game {
     async fn new(window: &Window) -> Self {
         let controller = Controller::new();
 
-        let camera = Camera::new();
+        let camera = Camera::new(1.0..=20.0);
         
         let pallettes = vec![
             vec![
@@ -74,15 +74,13 @@ impl Game {
                 glm::Vec3::new(1.0, 0.0, 0.1),
                 glm::Vec3::new(0.0, 0.6, 1.0),
                 glm::Vec3::new(0.7, 1.0, 0.1),
-                glm::Vec3::new(1.0, 0.2, 0.9),
             ],
         ];
 
         let colors = pallettes[2].clone();
-        
-        assert!(colors.len() < MAX_COLORS);
-
         let color_table = Self::new_color_table(colors.len());
+
+        assert!(colors.len() < MAX_COLORS);
 
         let particle_settings = ParticleSettings { 
             colors,
@@ -98,8 +96,6 @@ impl Game {
         let world = World::new(2500.0, particle_settings.max_r, MAX_INSTANCES);
 
         let renderer = Renderer::new(window, &particle_settings.colors).await;
-
-        println!("Game initialized!");
     
         Self {
             renderer,
@@ -118,8 +114,6 @@ impl Game {
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
         if new_size.width > 0 && new_size.height > 0 {
-            println!("Window resized to (x: {}, y: {})", new_size.width, new_size.height);
-
             self.renderer.resize(new_size, scale_factor);
 
             self.camera.size.x = new_size.width as f32;
@@ -135,36 +129,26 @@ impl Game {
         self.delta_time = self.last_frame_time.elapsed().unwrap().as_secs_f32();
         self.last_frame_time = std::time::SystemTime::now();
 
-        self.camera.zoom -= self.controller.mouse_wheel * 0.025 * self.camera.zoom;
+        let camera_direction = glm::Vec2::new(
+            self.controller.get_axis(Key::A, Key::D),
+            self.controller.get_axis(Key::S, Key::W),
+        );
 
-        self.camera.zoom = self.camera.zoom.clamp(0.1, 20.0);
+        self.camera.zoom(self.controller.mouse_wheel * 0.025);
+        self.camera.move_xy(camera_direction * 400.0 * self.delta_time);
 
-        self.controller.mouse_wheel = 0.0;
-
-        let camera_speed = 400.0 * self.delta_time * self.camera.zoom;
-
-        if self.controller.is_key_pressed(VirtualKeyCode::W) {
-            self.camera.position.y += camera_speed;
-        } else if self.controller.is_key_pressed(VirtualKeyCode::S) {
-            self.camera.position.y -= camera_speed;
-        }
-
-        if self.controller.is_key_pressed(VirtualKeyCode::D) {
-            self.camera.position.x += camera_speed;
-        } else if self.controller.is_key_pressed(VirtualKeyCode::A) {
-            self.camera.position.x -= camera_speed;
-        }
-
-        if self.controller.is_key_pressed(VirtualKeyCode::R) {
+        if self.controller.is_key_pressed(Key::R) {
             self.world.gen_particles(self.particle_settings.colors.len());
         }
-        if self.controller.is_key_pressed(VirtualKeyCode::T) {
+        if self.controller.is_key_pressed(Key::T) {
             self.particle_settings.color_table = Self::new_color_table(self.particle_settings.colors.len());
         }
 
         self.world.update_partitions();
 
         self.world.update_particles(self.delta_time, &self.particle_settings);
+
+        self.controller.update();
     }
 
     fn render(&mut self, gui: &mut GUI) -> Result<(), wgpu::SurfaceError> {
@@ -204,17 +188,18 @@ impl Game {
     }
 }
 
-pub async fn run() {
+async fn run() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
     
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    window.set_inner_size(LogicalSize::new(1200, 1000));
-    window.set_title("Particle Life");
+    let window = WindowBuilder::new()
+        .with_inner_size(LogicalSize::new(1200, 1000))
+        .with_title("Particle Life")
+        .build(&event_loop)
+        .unwrap();
 
     let mut gui = GUI::new(&window);
-
     let mut game = Game::new(&window).await;
 
     event_loop.run(move |event, _, control_flow| {

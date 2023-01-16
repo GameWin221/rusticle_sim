@@ -1,6 +1,6 @@
 extern crate nalgebra_glm as glm;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Particle{
     pub position: glm::Vec2,
     pub velocity: glm::Vec2,

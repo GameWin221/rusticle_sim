@@ -10,7 +10,7 @@ use crate::{
 
 use std::{
     sync::{Arc, RwLock},
-    f32::consts::PI
+    f32::consts::PI, time::Instant
 };
 
 const DEFAULT_NUM_PARTICLES_PER_CELL: usize = 256;
@@ -58,7 +58,7 @@ impl World {
     }
 
     pub fn get_particles(&self) -> Vec<Particle> {
-        self.particles.read().unwrap().iter().map(|&p| {
+        self.particles.read().unwrap().iter().map(|p| {
             p.clone()
         }).collect()
     }
@@ -67,8 +67,8 @@ impl World {
         self.particles = Arc::new(RwLock::new((0..self.max_particles).map(|_| {
             Particle::new(
                 glm::Vec2::new(
-                    rand::thread_rng().gen_range(-self.size ..=self.size ) / 2.0 + rand::thread_rng().gen_range(-self.size ..=self.size ) / 2.0,
-                    rand::thread_rng().gen_range(-self.size..=self.size) / 2.0 + rand::thread_rng().gen_range(-self.size..=self.size) / 2.0
+                    rand::thread_rng().gen_range(-self.size ..=self.size ),
+                    rand::thread_rng().gen_range(-self.size..=self.size)
                 ), 
                 rand::thread_rng().gen_range(0..color_count as u8)
             )
@@ -78,8 +78,13 @@ impl World {
     pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings) {
         let start = std::time::Instant::now();
 
+        let duration = Arc::new(RwLock::new(std::time::Duration::ZERO));
+
+        {
         let all_partitions = self.partitions.read().unwrap();
-        let all_particles_clone = self.particles.read().unwrap().clone();
+        let all_particles = self.particles.read().unwrap().clone();
+
+        let particle_speed = 75.0 * particle_settings.force * delta_time;
 
         all_partitions.par_iter().enumerate().for_each(|(index, partition)|{
             let mut other_partitions = Vec::with_capacity(9);
@@ -174,15 +179,14 @@ impl World {
             }
 
             for &index in &partition.particles {
-                let mut new_particle = self.particles.read().unwrap()[index].clone();
+                let mut new_particle = all_particles[index].clone();
 
                 new_particle.velocity *= particle_settings.drag.powf(delta_time);
-                
+
                 for &other_partition in &other_partitions {
                     for &other_index in &other_partition.particles {
-                        
-                        let other = &all_particles_clone[other_index];
-           
+                        let other = &all_particles[other_index];
+
                         let diff: glm::Vec2 = other.position - new_particle.position;
                         let dist: f32 = (diff.x*diff.x+diff.y*diff.y).sqrt();
         
@@ -190,21 +194,23 @@ impl World {
                             continue;
                         } 
         
-                        let dir: glm::Vec2 = glm::Vec2::new(diff.x / dist, diff.y / dist);
+                        let dir: glm::Vec2 = diff / dist;
+                        let particle_acceleration: glm::Vec2 = particle_speed * dir;
                         
                         // https://www.desmos.com/calculator/yacrclthei?lang=pl
                         if dist > particle_settings.min_r {
                             let c = particle_settings.color_table[new_particle.color_id as usize][other.color_id as usize];
-                            new_particle.velocity += particle_settings.force * dir * c * ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
+                            new_particle.velocity += particle_acceleration * c * ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
                         } else {
-                            new_particle.velocity += particle_settings.force * dir * (dist / particle_settings.min_r - 1.0);
+                            new_particle.velocity += particle_acceleration * (dist / particle_settings.min_r - 1.0);
                         }
                     }
                 }
-                
+
                 self.particles.write().unwrap()[index] = new_particle;
             }
         });
+        }
 
         self.particles.write().unwrap().iter_mut().for_each(|particle| {
             particle.position += particle.velocity * delta_time;
@@ -230,7 +236,9 @@ impl World {
             }
         });
 
-        print!("Physics update took: {:.2}ms) ", start.elapsed().as_secs_f32()*1000.0);
+        let elapsed = start.elapsed();
+
+        print!("Physics update took: {:.2}ms) ", elapsed.as_secs_f32()*1000.0);
     }
 
     pub fn gen_partitions(&mut self, world_size: f32, cell_size: f32) {
