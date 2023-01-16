@@ -23,7 +23,6 @@
 
 ### Maybe get rid of deltatime and introduce a fixed timestep? Deltatime glitches the sim at lower fps
 
-
 # Bugs and errors:
 ### CELLS AREN'T ALWAYS THE SAME, THEY ARE SMALLER/BIGERR ON TOP AND RIGHT EDGE BECAUSE OF HOW IT IS CALCULATED
-### WAITING FOR .write() on RwLocks TAKES THE MOST TIME IN THE SIMULATION
+### MULTITHREADING DOESN'T GIVE AS MUCH BENEFITS AS IT SHOULD - USE A THREADPOOL

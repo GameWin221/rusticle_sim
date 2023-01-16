@@ -31,7 +31,7 @@ const INDICES: &[u32] = &[
     3, 1, 2,
 ];
 
-pub const MAX_INSTANCES: usize = 4096*3;//4096*4;//4096;
+pub const MAX_INSTANCES: usize = 4096*4;//4096;
 pub const MAX_COLORS: usize = 32;
 
 impl Vertex {

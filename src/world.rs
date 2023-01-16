@@ -8,11 +8,6 @@ use crate::{
     particle_settings::{ParticleSettings, ParticleWrapping}
 };
 
-use std::{
-    sync::{Arc, RwLock},
-    f32::consts::PI, time::Instant
-};
-
 const DEFAULT_NUM_PARTICLES_PER_CELL: usize = 256;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -29,8 +24,8 @@ impl PartitionCell {
 }
 
 pub struct World {
-    particles: Arc<RwLock<Vec<Particle>>>,
-    partitions: Arc<RwLock<Vec<PartitionCell>>>,
+    particles: Vec<Particle>,
+    partitions: Vec<PartitionCell>,
 
     size: f32,
     cell_size: f32, 
@@ -46,8 +41,8 @@ impl World {
         println!("Creating a world with size: {}x{} and {}x{} partitions (each {}x{})", size*2.0, size*2.0, cell_count, cell_count, cell_size, cell_size);
 
         Self {
-            particles: Arc::new(RwLock::new(Vec::with_capacity(max_particles))),
-            partitions: Arc::new(RwLock::new(vec![PartitionCell::new(); cell_count*cell_count])), 
+            particles: Vec::with_capacity(max_particles),
+            partitions: vec![PartitionCell::new(); cell_count*cell_count], 
 
             size,
             cell_size,
@@ -58,13 +53,13 @@ impl World {
     }
 
     pub fn get_particles(&self) -> Vec<Particle> {
-        self.particles.read().unwrap().iter().map(|p| {
+        self.particles.iter().map(|p| {
             p.clone()
         }).collect()
     }
 
     pub fn gen_particles(&mut self, color_count: usize) {
-        self.particles = Arc::new(RwLock::new((0..self.max_particles).map(|_| {
+        self.particles = (0..self.max_particles).map(|_| {
             Particle::new(
                 glm::Vec2::new(
                     rand::thread_rng().gen_range(-self.size ..=self.size ),
@@ -72,21 +67,22 @@ impl World {
                 ), 
                 rand::thread_rng().gen_range(0..color_count as u8)
             )
-        }).collect()));
+        }).collect();
     }
 
     pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings) {
-        let start = std::time::Instant::now();
-
-        let duration = Arc::new(RwLock::new(std::time::Duration::ZERO));
-
-        {
-        let all_partitions = self.partitions.read().unwrap();
-        let all_particles = self.particles.read().unwrap().clone();
+        let particles_vec_ptr: *const Vec<Particle> = &self.particles;
+        let particles_vec_addr = particles_vec_ptr as usize;
 
         let particle_speed = 75.0 * particle_settings.force * delta_time;
 
-        all_partitions.par_iter().enumerate().for_each(|(index, partition)|{
+        let min_r_norm = particle_settings.min_r / particle_settings.max_r;
+ 
+        let start = std::time::Instant::now();
+        self.partitions.par_iter().enumerate().for_each(|(index, partition)|{
+            unsafe {
+            let particles_mut = &mut*(particles_vec_addr as *mut Vec<Particle>);
+
             let mut other_partitions = Vec::with_capacity(9);
             other_partitions.push(partition);
             
@@ -96,30 +92,30 @@ impl World {
             match particle_settings.wrapping {
                 ParticleWrapping::Barrier => {
                     if x_i >= 1 { // Left
-                        other_partitions.push(&all_partitions[index-1]); 
+                        other_partitions.push(&self.partitions[index-1]); 
 
                         if y_i >= 1 { // Bottom Left
-                            other_partitions.push(&all_partitions[index-self.cell_count-1]);  
+                            other_partitions.push(&self.partitions[index-self.cell_count-1]);  
                         }
                         if y_i < self.cell_count - 1 { // Top Left
-                            other_partitions.push(&all_partitions[index+self.cell_count-1]);  
+                            other_partitions.push(&self.partitions[index+self.cell_count-1]);  
                         }
                     }
                     if x_i < self.cell_count - 1 { // Right
-                        other_partitions.push(&all_partitions[index+1]); 
+                        other_partitions.push(&self.partitions[index+1]); 
 
                         if y_i >= 1 { // Bottom Right
-                            other_partitions.push(&all_partitions[index-self.cell_count+1]);  
+                            other_partitions.push(&self.partitions[index-self.cell_count+1]);  
                         }
                         if y_i < self.cell_count - 1 { // Top Right
-                            other_partitions.push(&all_partitions[index+self.cell_count+1]);  
+                            other_partitions.push(&self.partitions[index+self.cell_count+1]);  
                         }
                     }
                     if y_i >= 1 { // Bottom
-                        other_partitions.push(&all_partitions[index-self.cell_count]);  
+                        other_partitions.push(&self.partitions[index-self.cell_count]);  
                     }
                     if y_i < self.cell_count - 1 { // Top
-                        other_partitions.push(&all_partitions[index+self.cell_count]);  
+                        other_partitions.push(&self.partitions[index+self.cell_count]);  
                     }
                 }
                 ParticleWrapping::Wrap => {
@@ -157,62 +153,68 @@ impl World {
                     */
                     /*
                     // Left
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 - 1, w), y, w)]); 
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), y, w)]); 
                     // Bottom Left
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 - 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 - 1, w), w)]);  
                     // Top Left
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 + 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 + 1, w), w)]);  
 
                     // Right
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 + 1, w), y, w)]); 
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), y, w)]); 
                     // Bottom Right
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 - 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 - 1, w), w)]);  
                     // Top Right
-                    other_partitions.push(&all_partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 + 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 + 1, w), w)]);  
 
                     // Bottom
-                    other_partitions.push(&all_partitions[to_id(x, wrap(y as i32 + 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(x, wrap(y as i32 + 1, w), w)]);  
                     // Top
-                    other_partitions.push(&all_partitions[to_id(x, wrap(y as i32 - 1, w), w)]);  
+                    other_partitions.push(&self.partitions[to_id(x, wrap(y as i32 - 1, w), w)]);  
                     */
                 }
             }
 
+            // Maybe this approach would be better? https://stackoverflow.com/questions/71182117/change-elements-in-vector-using-multithreading-in-rust
+            // Split the workload (particle vector) to smaller vectors and move them to their respective threads
+            // After the work is done, retrieve the particles and copy them to the original vector
+            // 'crossbeam' crate will be really helpful with its scoped threads
+
             for &index in &partition.particles {
-                let mut new_particle = all_particles[index].clone();
+                let particle = &mut particles_mut[index];
 
-                new_particle.velocity *= particle_settings.drag.powf(delta_time);
+                particle.velocity *= particle_settings.drag.powf(delta_time);
 
-                for &other_partition in &other_partitions {
+                for &other_partition in &other_partitions{
                     for &other_index in &other_partition.particles {
-                        let other = &all_particles[other_index];
+                        let other = &self.particles[other_index];
 
-                        let diff: glm::Vec2 = other.position - new_particle.position;
+                        let diff: glm::Vec2 = other.position - particle.position;
                         let dist: f32 = (diff.x*diff.x+diff.y*diff.y).sqrt();
-        
-                        if dist < 0.0001 || dist > particle_settings.max_r {
+    
+                        if dist == 0.0 {
                             continue;
                         } 
-        
-                        let dir: glm::Vec2 = diff / dist;
-                        let particle_acceleration: glm::Vec2 = particle_speed * dir;
+
+                        let particle_acceleration: glm::Vec2 = diff / dist * particle_speed;
                         
-                        // https://www.desmos.com/calculator/yacrclthei?lang=pl
+                        // https://www.desmos.com/calculator/xjmwts0q8l
                         if dist > particle_settings.min_r {
-                            let c = particle_settings.color_table[new_particle.color_id as usize][other.color_id as usize];
-                            new_particle.velocity += particle_acceleration * c * ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
+                            let c = particle_settings.color_table[particle.color_id as usize][other.color_id as usize];
+                            // Old equation was removed because it was too costly: ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
+                            let v = 1.0 - (1.0 + min_r_norm - 2.0 * (dist/particle_settings.max_r).min(1.0)).abs() / (1.0 - min_r_norm);
+                            
+                            particle.velocity += particle_acceleration * c * v;
                         } else {
-                            new_particle.velocity += particle_acceleration * (dist / particle_settings.min_r - 1.0);
+                            particle.velocity += particle_acceleration * (dist / particle_settings.min_r - 1.0);
                         }
                     }
                 }
-
-                self.particles.write().unwrap()[index] = new_particle;
-            }
+            }}
         });
-        }
 
-        self.particles.write().unwrap().iter_mut().for_each(|particle| {
+        let elapsed = start.elapsed();
+
+        self.particles.iter_mut().for_each(|particle| {
             particle.position += particle.velocity * delta_time;
 
             match particle_settings.wrapping {
@@ -236,7 +238,7 @@ impl World {
             }
         });
 
-        let elapsed = start.elapsed();
+
 
         print!("Physics update took: {:.2}ms) ", elapsed.as_secs_f32()*1000.0);
     }
@@ -245,7 +247,7 @@ impl World {
         let cell_count = (world_size * 2.0 / cell_size).ceil() as usize;
 
         self.size = world_size;
-        self.partitions = Arc::new(RwLock::new(vec![PartitionCell::new(); cell_count*cell_count]));
+        self.partitions = vec![PartitionCell::new(); cell_count*cell_count];
         self.cell_count = cell_count;
         self.cell_size = cell_size;
 
@@ -255,16 +257,16 @@ impl World {
     pub fn update_partitions(&mut self) {
         let start = std::time::Instant::now();
 
-        let partitions = &mut self.partitions.write().unwrap();
-
-        partitions.iter_mut().for_each(|partition|{
+        self.partitions.iter_mut().for_each(|partition|{
             partition.particles.clear();
         });
+    
+        let particles = self.particles.clone();
 
-        self.particles.write().unwrap().iter().enumerate().for_each(|(index, particle)| {
+        particles.iter().enumerate().for_each(|(index, particle)| {
             let id = self.get_partition_id(&particle.position);
 
-            partitions[id].particles.push(index);
+            self.partitions[id].particles.push(index);
         });
 
         let update = start.elapsed().as_secs_f64()*1000.0;
