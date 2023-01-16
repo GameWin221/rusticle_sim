@@ -77,23 +77,20 @@ impl Game {
             ],
         ];
 
+        //let colors = pallettes[2].clone();
         let colors = pallettes[2].clone();
         let color_table = Self::new_color_table(colors.len());
-
-        assert!(colors.len() < MAX_COLORS);
 
         let particle_settings = ParticleSettings { 
             colors,
             color_table,
-            max_r: 250.0,
-            min_r: 50.0,
-            force: 5.0,
-            drag: 0.0000001,
-            radius: 20.0,
-            wrapping: ParticleWrapping::Barrier,
+            ..Default::default()
         };
 
-        let world = World::new(2500.0, particle_settings.max_r, MAX_INSTANCES);
+        assert!(particle_settings.colors.len() < MAX_COLORS);
+        assert!(particle_settings.max_particles < MAX_INSTANCES);
+
+        let world = World::new(2500.0, particle_settings.max_r, particle_settings.max_particles);
 
         let renderer = Renderer::new(window, &particle_settings.colors).await;
     
@@ -138,10 +135,13 @@ impl Game {
         self.camera.move_xy(camera_direction * 400.0 * self.delta_time);
 
         if self.controller.is_key_pressed(Key::R) {
-            self.world.gen_particles(self.particle_settings.colors.len());
+            self.world.new_particles(self.particle_settings.colors.len(), self.particle_settings.max_particles);
         }
         if self.controller.is_key_pressed(Key::T) {
             self.particle_settings.color_table = Self::new_color_table(self.particle_settings.colors.len());
+        }
+        if self.controller.is_key_pressed(Key::Y) {
+            self.show_ui = !self.show_ui;
         }
 
         self.world.update_partitions();
@@ -161,12 +161,16 @@ impl Game {
         }
 
         let frame_data = if self.show_ui {
-            let old_max_r = self.particle_settings.max_r;
+            let mut max_r_changed = false;
+            let mut colors_changed = false;
 
-            let data = gui.draw_ui(&mut self.particle_settings);
+            let data = gui.draw_ui(&mut self.particle_settings, &mut max_r_changed, &mut colors_changed);
 
-            if old_max_r != self.particle_settings.max_r {
-                self.world.gen_partitions(2500.0, self.particle_settings.max_r);
+            if max_r_changed {
+                self.world.new_partitions(2500.0, self.particle_settings.max_r);
+            }
+            if colors_changed {
+                self.renderer.update_colors(&self.particle_settings.colors);
             }
 
             data
@@ -174,7 +178,7 @@ impl Game {
             None
         };
 
-        let result = self.renderer.render(self.camera.calc_matrices(), frame_data);
+        let result = self.renderer.render(self.camera.calc_matrices(), self.particle_settings.sharpness, frame_data);
 
         result
     }

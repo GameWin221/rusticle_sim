@@ -12,6 +12,7 @@ use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PushConstants{
     proj_view: [[f32; 4]; 4],
+    particle_sharpness: f32,
 }
 
 #[repr(C)]
@@ -31,7 +32,7 @@ const INDICES: &[u32] = &[
     3, 1, 2,
 ];
 
-pub const MAX_INSTANCES: usize = 4096*4;//4096;
+pub const MAX_INSTANCES: usize = 4096*8;//4096;
 pub const MAX_COLORS: usize = 32;
 
 impl Vertex {
@@ -258,8 +259,7 @@ impl Renderer {
             }
         );
 
-        let mut instances = Vec::new();
-        instances.reserve(MAX_INSTANCES);
+        let instances = Vec::with_capacity(MAX_INSTANCES);
         
         let alloc_data = (0..MAX_INSTANCES).map(|_|{
             Instance {
@@ -367,7 +367,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, proj_view: glm::Mat4, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, proj_view: glm::Mat4, particle_sharpness: f32, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
 
         let output = self.surface.get_current_texture()?;
@@ -404,7 +404,10 @@ impl Renderer {
 
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32); 
             
-            render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{proj_view: proj_view.into()}));
+            render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{
+                proj_view: proj_view.into(),
+                particle_sharpness
+            }));
 
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as u32);
         }

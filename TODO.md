@@ -11,12 +11,10 @@
     - Before each physics update, there will be a partition update which assigns particles to cells
     - A partition holds indexes to certain particles
 
-3. Variable particle smoothness
-    - Add a push constant for smoothstep min bound
-
+3. Post Processing:
+    - Bloom
 
 4. UI
-    - Physics properties panel
     - Color properties
     - Rendering
     - Debug and metrics

@@ -30,8 +30,6 @@ pub struct World {
     size: f32,
     cell_size: f32, 
     cell_count: usize,
-
-    max_particles: usize,
 }
 
 impl World {
@@ -46,9 +44,7 @@ impl World {
 
             size,
             cell_size,
-            cell_count,
-
-            max_particles
+            cell_count
         }
     }
 
@@ -58,8 +54,8 @@ impl World {
         }).collect()
     }
 
-    pub fn gen_particles(&mut self, color_count: usize) {
-        self.particles = (0..self.max_particles).map(|_| {
+    pub fn new_particles(&mut self, color_count: usize, particle_count: usize) {
+        self.particles = (0..particle_count).map(|_| {
             Particle::new(
                 glm::Vec2::new(
                     rand::thread_rng().gen_range(-self.size ..=self.size ),
@@ -75,6 +71,8 @@ impl World {
         let particles_vec_addr = particles_vec_ptr as usize;
 
         let particle_speed = 75.0 * particle_settings.force * delta_time;
+
+        let drag = particle_settings.drag.powi(6);
 
         let min_r_norm = particle_settings.min_r / particle_settings.max_r;
  
@@ -182,7 +180,7 @@ impl World {
             for &index in &partition.particles {
                 let particle = &mut particles_mut[index];
 
-                particle.velocity *= particle_settings.drag.powf(delta_time);
+                particle.velocity *= drag.powf(delta_time);
 
                 for &other_partition in &other_partitions{
                     for &other_index in &other_partition.particles {
@@ -243,7 +241,7 @@ impl World {
         print!("Physics update took: {:.2}ms) ", elapsed.as_secs_f32()*1000.0);
     }
 
-    pub fn gen_partitions(&mut self, world_size: f32, cell_size: f32) {
+    pub fn new_partitions(&mut self, world_size: f32, cell_size: f32) {
         let cell_count = (world_size * 2.0 / cell_size).ceil() as usize;
 
         self.size = world_size;

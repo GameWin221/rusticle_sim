@@ -1,5 +1,6 @@
 struct PushConstants {
     proj_view: mat4x4<f32>,
+    particle_sharpness: f32,
 };
 
 struct ColorsBuffer {
@@ -40,7 +41,7 @@ fn vs_main(vert: VertexInput, instance: InstanceInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let circle = smoothstep(1.0, 0.0, length(in.fuv));
+    let circle = smoothstep(1.0, pc.particle_sharpness, length(in.fuv));
     
     return vec4<f32>(in.fcolor, circle);
 }
