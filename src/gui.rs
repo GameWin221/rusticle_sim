@@ -1,11 +1,10 @@
-extern crate nalgebra_glm as glm;
-
 use ::egui::FontDefinitions;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use egui::{FullOutput, ClippedPrimitive};
 
 use winit::{window::Window, event::Event};
 
+use crate::color_table::ColorTable;
 use crate::particle_settings::{ParticleSettings, ParticleWrapping};
 
 pub struct GUI {
@@ -33,7 +32,16 @@ impl GUI {
         self.platform.handle_event(event);
     }
 
-    pub fn draw_ui(&mut self, particle_settings: &mut ParticleSettings, max_r_changed: &mut bool, colors_changed: &mut bool) -> Option<(FullOutput, Vec<ClippedPrimitive>)> {
+    pub fn draw_ui(&mut self, 
+        particle_settings: &mut ParticleSettings,
+        color_table: &mut ColorTable,
+        max_r_changed: &mut bool,
+        colors_changed: &mut bool,
+        velocity_update_time: f32,
+        position_update_time: f32,
+        partition_update_time: f32,
+        gpu_time: f32,
+    ) -> Option<(FullOutput, Vec<ClippedPrimitive>)> {
         self.platform.begin_frame();
 
         egui::Window::new(String::from("Particle Settings"))
@@ -47,12 +55,7 @@ impl GUI {
                 ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(2).text("x^6 Drag"));
 
                 if ui.button("Restore defaults").clicked() {
-                    *particle_settings = ParticleSettings {
-                        colors: particle_settings.colors.clone(),
-                        color_table: particle_settings.color_table.clone(),
-                        ..Default::default()
-                    };
-
+                    *particle_settings = ParticleSettings::default();
                     *max_r_changed = true;
                 }
 
@@ -62,20 +65,20 @@ impl GUI {
 
                 ui.horizontal(|ui| {
                     if ui.button("   Flip   ").clicked() {
-                        let color_count = particle_settings.colors.len();
+                        let color_count = color_table.colors.len();
 
                         for y in 0..color_count {
                             for x in 0..=y {
-                                let tmp = particle_settings.color_table[y][x];
-                                particle_settings.color_table[y][x] = particle_settings.color_table[color_count-1-y][color_count-1-x];
-                                particle_settings.color_table[color_count-1-y][color_count-1-x] = tmp;
+                                let tmp = color_table.table[y][x];
+                                color_table.table[y][x] = color_table.table[color_count-1-y][color_count-1-x];
+                                color_table.table[color_count-1-y][color_count-1-x] = tmp;
                             }
                         }
                     }
 
-                    for (y_index, _) in particle_settings.color_table.iter_mut().enumerate() {
+                    for (y_index, _) in color_table.table.iter_mut().enumerate() {
                     
-                        let color = &mut particle_settings.colors[y_index];
+                        let color = &mut color_table.colors[y_index];
 
                         let mut rgb = [color.x, color.y, color.z];
 
@@ -88,9 +91,9 @@ impl GUI {
                         continue;
                     }
                 });
-                for (y_index, row) in particle_settings.color_table.iter_mut().enumerate() {
+                for (y_index, row) in color_table.table.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
-                        let color = &mut particle_settings.colors[y_index];
+                        let color = &mut color_table.colors[y_index];
 
                         let mut rgb = [color.x, color.y, color.z];
 
@@ -106,8 +109,6 @@ impl GUI {
                         }
                     });
                 }
-
-  
 
                 ui.separator();
 
@@ -125,6 +126,14 @@ impl GUI {
                     ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
                     ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
                 });
+            });
+
+        egui::Window::new(String::from("Metrics"))
+            .show(&self.platform.context(), |ui| {
+                ui.label(format!("Velocity update time: {:.2}ms", velocity_update_time));
+                ui.label(format!("Position update time: {:.2}ms", position_update_time));
+                ui.label(format!("Partition update time: {:.2}ms", partition_update_time));
+                ui.label(format!("GPU time: {:.2}ms", gpu_time));
             });
     
         let full_output = self.platform.end_frame(None);

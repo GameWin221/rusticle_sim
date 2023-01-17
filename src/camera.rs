@@ -1,5 +1,3 @@
-extern crate nalgebra_glm as glm;
-
 use std::ops::RangeInclusive;
 
 pub struct Camera {
@@ -26,6 +24,14 @@ impl Camera {
 
     pub fn move_xy(&mut self, delta: glm::Vec2) {
         self.position += delta * self.scale;
+    }
+
+    pub fn move_towards(&mut self, speed: f32, target: glm::Vec2) {
+        let diff = target - self.position;
+        let dist = diff.magnitude();
+        let dir = diff.normalize();
+
+        self.position += speed * dist * self.scale * dir;
     }
 
     pub fn viewport_to_world(&self, ndc: glm::Vec2) -> glm::Vec2 {

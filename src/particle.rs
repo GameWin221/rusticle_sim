@@ -1,5 +1,3 @@
-extern crate nalgebra_glm as glm;
-
 #[derive(Clone)]
 pub struct Particle{
     pub position: glm::Vec2,

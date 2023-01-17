@@ -8,22 +8,23 @@ use winit::{
     dpi::LogicalSize
 };
 
-use rand::Rng;
-
 mod particle;
 mod gui;
 mod camera;
 mod renderer;
 mod controller;
 mod world;
+
 mod particle_settings;
+mod color_table;
 
 use world::World;
-use particle_settings::{ParticleSettings, ParticleWrapping};
+use particle_settings::ParticleSettings;
+use color_table::ColorTable;
 use gui::GUI;
 use camera::Camera;
 use renderer::{Renderer, MAX_INSTANCES, MAX_COLORS};
-use controller::{Controller, Key};
+use controller::{Controller, Key, Button};
 
 struct Game {
     renderer: Renderer,
@@ -36,6 +37,9 @@ struct Game {
     //particles: Vec<Particle>,
     world: World,
     particle_settings: ParticleSettings, 
+    color_table: ColorTable, 
+
+    followed_index: Option<usize>,
 
     show_ui: bool
 }
@@ -77,22 +81,16 @@ impl Game {
             ],
         ];
 
-        //let colors = pallettes[2].clone();
-        let colors = pallettes[2].clone();
-        let color_table = Self::new_color_table(colors.len());
+        let color_table = ColorTable::new(pallettes[2].clone());
 
-        let particle_settings = ParticleSettings { 
-            colors,
-            color_table,
-            ..Default::default()
-        };
+        let particle_settings = ParticleSettings::default();
 
-        assert!(particle_settings.colors.len() < MAX_COLORS);
+        assert!(color_table.colors.len() < MAX_COLORS);
         assert!(particle_settings.max_particles < MAX_INSTANCES);
 
         let world = World::new(2500.0, particle_settings.max_r, particle_settings.max_particles);
 
-        let renderer = Renderer::new(window, &particle_settings.colors).await;
+        let renderer = Renderer::new(window, &color_table.colors).await;
     
         Self {
             renderer,
@@ -104,6 +102,9 @@ impl Game {
 
             world,
             particle_settings,
+            color_table,
+
+            followed_index: None,
 
             show_ui: true
         }
@@ -126,19 +127,24 @@ impl Game {
         self.delta_time = self.last_frame_time.elapsed().unwrap().as_secs_f32();
         self.last_frame_time = std::time::SystemTime::now();
 
-        let camera_direction = glm::Vec2::new(
-            self.controller.get_axis(Key::A, Key::D),
-            self.controller.get_axis(Key::S, Key::W),
-        );
-
         self.camera.zoom(self.controller.mouse_wheel * 0.025);
-        self.camera.move_xy(camera_direction * 400.0 * self.delta_time);
 
+        if let Some(followed_index) = self.followed_index {
+            self.camera.move_towards(3.0 * self.delta_time, self.world.get_particle(followed_index).position);
+        } else {
+            let camera_direction = glm::Vec2::new(
+                self.controller.get_axis(Key::A, Key::D),
+                self.controller.get_axis(Key::S, Key::W),
+            );
+    
+            self.camera.move_xy(camera_direction * 400.0 * self.delta_time);
+        }
+        
         if self.controller.is_key_pressed(Key::R) {
-            self.world.new_particles(self.particle_settings.colors.len(), self.particle_settings.max_particles);
+            self.world.new_particles(self.color_table.colors.len(), self.particle_settings.max_particles);
         }
         if self.controller.is_key_pressed(Key::T) {
-            self.particle_settings.color_table = Self::new_color_table(self.particle_settings.colors.len());
+            self.color_table.new_table();
         }
         if self.controller.is_key_pressed(Key::Y) {
             self.show_ui = !self.show_ui;
@@ -146,7 +152,21 @@ impl Game {
 
         self.world.update_partitions();
 
-        self.world.update_particles(self.delta_time, &self.particle_settings);
+        self.world.update_particles(self.delta_time, &self.particle_settings, &self.color_table);
+
+        if self.controller.is_button_pressed(Button::Left) && self.controller.is_key_down(Key::LShift) {
+            let ndc: glm::Vec2 = glm::Vec2::new(
+                self.controller.mouse_position.0 as f32 / self.camera.size.x * 2.0 - 1.0,
+                (1.0 - self.controller.mouse_position.1 as f32 / self.camera.size.y) * 2.0 - 1.0
+            );
+
+            if let Some(id) = self.world.get_closest_particle_id(&self.camera.viewport_to_world(ndc)) {
+                self.followed_index = Some(id);
+                println!("Following: {}", self.followed_index.unwrap());
+            }
+        } else if self.controller.is_button_pressed(Button::Right) {
+            self.followed_index = None;
+        }
 
         self.controller.update();
     }
@@ -155,7 +175,6 @@ impl Game {
         for particle in self.world.get_particles() {
             self.renderer.enqueue_instance(renderer::Instance {
                 position: particle.position,
-                radius: self.particle_settings.radius,
                 color_id: particle.color_id as u32
             });
         }
@@ -164,13 +183,22 @@ impl Game {
             let mut max_r_changed = false;
             let mut colors_changed = false;
 
-            let data = gui.draw_ui(&mut self.particle_settings, &mut max_r_changed, &mut colors_changed);
+            let data = gui.draw_ui(
+                &mut self.particle_settings,
+                &mut self.color_table,
+                &mut max_r_changed,
+                &mut colors_changed,
+                self.world.velocity_update_time,
+                self.world.position_update_time,
+                self.world.partition_update_time,
+                self.renderer.gpu_time
+            );
 
             if max_r_changed {
                 self.world.new_partitions(2500.0, self.particle_settings.max_r);
             }
             if colors_changed {
-                self.renderer.update_colors(&self.particle_settings.colors);
+                self.renderer.update_colors(&self.color_table.colors);
             }
 
             data
@@ -178,17 +206,14 @@ impl Game {
             None
         };
 
-        let result = self.renderer.render(self.camera.calc_matrices(), self.particle_settings.sharpness, frame_data);
+        let result = self.renderer.render(
+            self.camera.calc_matrices(),
+            self.particle_settings.sharpness,
+            self.particle_settings.radius,
+            frame_data,
+        );
 
         result
-    }
-
-    fn new_color_table(color_count: usize) -> Vec<Vec<f32>> {
-        (0..color_count).map(|_| {
-            (0..color_count).map(|_| {
-                rand::thread_rng().gen_range(-1.0..=1.0)
-            }).collect()
-        }).collect()
     }
 }
 

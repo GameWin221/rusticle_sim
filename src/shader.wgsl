@@ -1,6 +1,7 @@
 struct PushConstants {
     proj_view: mat4x4<f32>,
     particle_sharpness: f32,
+    particle_radius: f32,
 };
 
 struct ColorsBuffer {
@@ -17,8 +18,7 @@ struct VertexInput {
 
 struct InstanceInput {
     @location(1) position: vec2<f32>,
-    @location(2) radius: f32,
-    @location(3) color_id: u32,
+    @location(2) color_id: u32,
 };
 
 struct VertexOutput {
@@ -32,7 +32,7 @@ struct VertexOutput {
 fn vs_main(vert: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
 
-    out.fpos = pc.proj_view * vec4<f32>(vert.vpos * instance.radius + instance.position, 0.0, 1.0);
+    out.fpos = pc.proj_view * vec4<f32>(vert.vpos * pc.particle_radius + instance.position, 0.0, 1.0);
     out.fuv = vert.vpos*2.0;
     out.fcolor = colors.colors[instance.color_id].xyz;
 

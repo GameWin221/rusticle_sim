@@ -1,5 +1,3 @@
-extern crate nalgebra_glm as glm;
-
 use std::time::Instant;
 
 use egui::{FullOutput, ClippedPrimitive};
@@ -13,6 +11,7 @@ use egui_wgpu_backend::{RenderPass, ScreenDescriptor};
 struct PushConstants{
     proj_view: [[f32; 4]; 4],
     particle_sharpness: f32,
+    particle_radius: f32,
 }
 
 #[repr(C)]
@@ -62,7 +61,6 @@ struct ColorRaw {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceRaw {
     position: [f32; 2],
-    radius: f32,
     color_id: u32,
 }
 
@@ -82,11 +80,6 @@ impl InstanceRaw {
                 wgpu::VertexAttribute {
                     offset: mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     shader_location: 2,
-                    format: wgpu::VertexFormat::Float32,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 3,
                     format: wgpu::VertexFormat::Uint32,
                 },
             ],
@@ -97,7 +90,6 @@ impl InstanceRaw {
 #[derive(Clone)]
 pub struct Instance {
     pub position: glm::Vec2,
-    pub radius: f32,
     pub color_id: u32
 }
 
@@ -105,7 +97,6 @@ impl Instance {
     fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
             position: self.position.into(),
-            radius: self.radius,
             color_id: self.color_id
         }
     }
@@ -119,6 +110,8 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     pub scale_factor: f64,
+
+    pub gpu_time: f32,
 
     pipeline: wgpu::RenderPipeline,
 
@@ -170,7 +163,7 @@ impl Renderer {
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
         };
 
         surface.configure(&device, &config);
@@ -264,7 +257,6 @@ impl Renderer {
         let alloc_data = (0..MAX_INSTANCES).map(|_|{
             Instance {
                position: glm::Vec2::identity(), 
-               radius: 0.0, 
                color_id: 0
             }
         }).collect::<Vec<_>>();
@@ -318,6 +310,8 @@ impl Renderer {
             size,
             scale_factor,
 
+            gpu_time: 1.0,
+
             pipeline,
 
             vertex_buffer,
@@ -367,7 +361,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, proj_view: glm::Mat4, particle_sharpness: f32, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, proj_view: glm::Mat4, particle_sharpness: f32, particle_radius: f32, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
         self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
 
         let output = self.surface.get_current_texture()?;
@@ -406,7 +400,8 @@ impl Renderer {
             
             render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{
                 proj_view: proj_view.into(),
-                particle_sharpness
+                particle_sharpness,
+                particle_radius
             }));
 
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as u32);
@@ -445,9 +440,7 @@ impl Renderer {
             output.present();
         }
 
-        let submit = start.elapsed().as_secs_f64()*1000.0;
-
-        println!("GPU took: {:.2}ms", submit);
+        self.gpu_time = start.elapsed().as_secs_f32()*1000.0;
 
         self.reset_queue();
 

@@ -3,7 +3,6 @@
     - A particle can teleport from one edge to another
     - A particle is updated agains other particles that belong to cells on the other side of the map
 
-
 2. World partitioning
     - The world is divided into cells with size greater or equal to `max_r`
     - A particle belongs to only one cell
@@ -15,12 +14,12 @@
     - Bloom
 
 4. UI
-    - Color properties
-    - Rendering
-    - Debug and metrics
+    - Better color table
+
+5. Saving and loading
 
 ### Maybe get rid of deltatime and introduce a fixed timestep? Deltatime glitches the sim at lower fps
 
 # Bugs and errors:
-### CELLS AREN'T ALWAYS THE SAME, THEY ARE SMALLER/BIGERR ON TOP AND RIGHT EDGE BECAUSE OF HOW IT IS CALCULATED
+### PARTITION CELLS AREN'T ALWAYS THE SAME, THEY ARE SMALLER/BIGGER ON TOP AND RIGHT EDGE BECAUSE OF HOW IT IS CALCULATED
 ### MULTITHREADING DOESN'T GIVE AS MUCH BENEFITS AS IT SHOULD - USE A THREADPOOL

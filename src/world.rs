@@ -1,11 +1,9 @@
-extern crate nalgebra_glm as glm;
-
 use rand::Rng;
 use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator};
 
 use crate::{
     particle::Particle,
-    particle_settings::{ParticleSettings, ParticleWrapping}
+    particle_settings::{ParticleSettings, ParticleWrapping}, color_table::ColorTable
 };
 
 const DEFAULT_NUM_PARTICLES_PER_CELL: usize = 256;
@@ -30,6 +28,10 @@ pub struct World {
     size: f32,
     cell_size: f32, 
     cell_count: usize,
+
+    pub velocity_update_time: f32,
+    pub position_update_time: f32,
+    pub partition_update_time: f32,
 }
 
 impl World {
@@ -44,29 +46,37 @@ impl World {
 
             size,
             cell_size,
-            cell_count
+            cell_count,
+
+            velocity_update_time: 0.0,
+            position_update_time: 0.0,
+            partition_update_time: 0.0,
         }
     }
 
-    pub fn get_particles(&self) -> Vec<Particle> {
-        self.particles.iter().map(|p| {
-            p.clone()
-        }).collect()
+    pub fn get_particles(&self) -> &Vec<Particle> {
+        &self.particles
+    }
+
+    pub fn get_particle(&self, index: usize) -> &Particle {
+        &self.particles.get(index).unwrap()
     }
 
     pub fn new_particles(&mut self, color_count: usize, particle_count: usize) {
         self.particles = (0..particle_count).map(|_| {
             Particle::new(
                 glm::Vec2::new(
-                    rand::thread_rng().gen_range(-self.size ..=self.size ),
-                    rand::thread_rng().gen_range(-self.size..=self.size)
+                    rand::thread_rng().gen_range(-self.size+0.1..=self.size-0.1),
+                    rand::thread_rng().gen_range(-self.size+0.1..=self.size-0.1)
                 ), 
                 rand::thread_rng().gen_range(0..color_count as u8)
             )
         }).collect();
     }
 
-    pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings) {
+    pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings, color_table: &ColorTable) {
+        let start = std::time::Instant::now();
+
         let particles_vec_ptr: *const Vec<Particle> = &self.particles;
         let particles_vec_addr = particles_vec_ptr as usize;
 
@@ -76,7 +86,6 @@ impl World {
 
         let min_r_norm = particle_settings.min_r / particle_settings.max_r;
  
-        let start = std::time::Instant::now();
         self.partitions.par_iter().enumerate().for_each(|(index, partition)|{
             unsafe {
             let particles_mut = &mut*(particles_vec_addr as *mut Vec<Particle>);
@@ -183,9 +192,7 @@ impl World {
                 particle.velocity *= drag.powf(delta_time);
 
                 for &other_partition in &other_partitions{
-                    for &other_index in &other_partition.particles {
-                        let other = &self.particles[other_index];
-
+                    for other in other_partition.particles.iter().map(|&other_index| &self.particles[other_index]) {
                         let diff: glm::Vec2 = other.position - particle.position;
                         let dist: f32 = (diff.x*diff.x+diff.y*diff.y).sqrt();
     
@@ -197,7 +204,7 @@ impl World {
                         
                         // https://www.desmos.com/calculator/xjmwts0q8l
                         if dist > particle_settings.min_r {
-                            let c = particle_settings.color_table[particle.color_id as usize][other.color_id as usize];
+                            let c = color_table.table[particle.color_id as usize][other.color_id as usize];
                             // Old equation was removed because it was too costly: ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
                             let v = 1.0 - (1.0 + min_r_norm - 2.0 * (dist/particle_settings.max_r).min(1.0)).abs() / (1.0 - min_r_norm);
                             
@@ -210,7 +217,9 @@ impl World {
             }}
         });
 
-        let elapsed = start.elapsed();
+        self.velocity_update_time = start.elapsed().as_secs_f32()*1000.0;
+
+        let start = std::time::Instant::now();
 
         self.particles.iter_mut().for_each(|particle| {
             particle.position += particle.velocity * delta_time;
@@ -236,9 +245,7 @@ impl World {
             }
         });
 
-
-
-        print!("Physics update took: {:.2}ms) ", elapsed.as_secs_f32()*1000.0);
+        self.position_update_time = start.elapsed().as_secs_f32()*1000.0;
     }
 
     pub fn new_partitions(&mut self, world_size: f32, cell_size: f32) {
@@ -267,9 +274,30 @@ impl World {
             self.partitions[id].particles.push(index);
         });
 
-        let update = start.elapsed().as_secs_f64()*1000.0;
+        self.partition_update_time = start.elapsed().as_secs_f32()*1000.0;
+    }
 
-        print!("Partition update took: {:.2}ms) ", update);
+    pub fn get_closest_particle_id(&self, pos: &glm::Vec2) -> Option<usize> {
+        if pos.x.abs() >= self.size || pos.y.abs() >= self.size {
+           return None;
+        }
+
+        let partition = &self.partitions[self.get_partition_id(pos)];
+
+        let mut closest_index = 0;
+        let mut closest_distance = f32::INFINITY;
+
+        for (index, particle) in partition.particles.iter().map(|&index| (index, &self.particles[index])) {
+            let diff = particle.position - pos;
+            let sq_dist = diff.x*diff.x+diff.y*diff.y;
+
+            if sq_dist < closest_distance {
+                closest_distance = sq_dist;
+                closest_index = index;
+            }
+        }
+
+        Some(closest_index)
     }
 
     fn get_partition_id(&self, pos: &glm::Vec2) -> usize {
