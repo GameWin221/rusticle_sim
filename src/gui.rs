@@ -61,6 +61,15 @@ impl GUI {
 
                 ui.separator();
 
+                ui.heading("Wrapping");
+
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
+                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
+                });
+
+                ui.separator();
+
                 ui.heading("Color Table");
 
                 ui.horizontal(|ui| {
@@ -117,15 +126,6 @@ impl GUI {
                 ui.add(egui::Slider::new(&mut particle_settings.radius, 1.0..=60.0).text("Radius"));
                 ui.add(egui::Slider::new(&mut particle_settings.sharpness, 0.0..=0.999).text("Sharpness"));
                 //ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(8).text("Drag"));
-
-                ui.separator();
-
-                ui.heading("Wrapping");
-
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
-                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
-                });
             });
 
         egui::Window::new(String::from("Metrics"))

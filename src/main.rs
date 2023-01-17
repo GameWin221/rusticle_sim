@@ -19,7 +19,7 @@ mod particle_settings;
 mod color_table;
 
 use world::World;
-use particle_settings::ParticleSettings;
+use particle_settings::{ParticleSettings, ParticleWrapping};
 use color_table::ColorTable;
 use gui::GUI;
 use camera::Camera;
@@ -81,14 +81,17 @@ impl Game {
             ],
         ];
 
-        let color_table = ColorTable::new(pallettes[2].clone());
+        let color_table = ColorTable::new(pallettes[3].clone());
 
-        let particle_settings = ParticleSettings::default();
+        let particle_settings = ParticleSettings {
+            max_particles: 4096*2,
+            ..Default::default()
+        };
 
         assert!(color_table.colors.len() < MAX_COLORS);
         assert!(particle_settings.max_particles < MAX_INSTANCES);
 
-        let world = World::new(2500.0, particle_settings.max_r, particle_settings.max_particles);
+        let world = World::new(2500.0, particle_settings.max_r);
 
         let renderer = Renderer::new(window, &color_table.colors).await;
     
@@ -148,6 +151,13 @@ impl Game {
         }
         if self.controller.is_key_pressed(Key::Y) {
             self.show_ui = !self.show_ui;
+        }
+        if self.controller.is_key_pressed(Key::U) {
+            self.particle_settings.wrapping = if self.particle_settings.wrapping == ParticleWrapping::Barrier {
+                ParticleWrapping::Wrap
+            } else {
+                ParticleWrapping::Barrier
+            }
         }
 
         self.world.update_partitions();

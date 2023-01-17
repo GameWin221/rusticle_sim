@@ -35,13 +35,13 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(size: f32, cell_size: f32, max_particles: usize) -> Self {
+    pub fn new(size: f32, cell_size: f32) -> Self {
         let cell_count = (size * 2.0 / cell_size).ceil() as usize;
 
         println!("Creating a world with size: {}x{} and {}x{} partitions (each {}x{})", size*2.0, size*2.0, cell_count, cell_count, cell_size, cell_size);
 
         Self {
-            particles: Vec::with_capacity(max_particles),
+            particles: Vec::new(),
             partitions: vec![PartitionCell::new(); cell_count*cell_count], 
 
             size,
@@ -91,7 +91,7 @@ impl World {
             let particles_mut = &mut*(particles_vec_addr as *mut Vec<Particle>);
 
             let mut other_partitions = Vec::with_capacity(9);
-            other_partitions.push(partition);
+            other_partitions.push((partition, glm::Vec2::zeros()));
             
             let y_i = index / self.cell_count;
             let x_i = index - y_i * self.cell_count;
@@ -99,101 +99,109 @@ impl World {
             match particle_settings.wrapping {
                 ParticleWrapping::Barrier => {
                     if x_i >= 1 { // Left
-                        other_partitions.push(&self.partitions[index-1]); 
+                        other_partitions.push((&self.partitions[index-1], glm::Vec2::zeros())); 
 
                         if y_i >= 1 { // Bottom Left
-                            other_partitions.push(&self.partitions[index-self.cell_count-1]);  
+                            other_partitions.push((&self.partitions[index-self.cell_count-1], glm::Vec2::zeros()));  
                         }
                         if y_i < self.cell_count - 1 { // Top Left
-                            other_partitions.push(&self.partitions[index+self.cell_count-1]);  
+                            other_partitions.push((&self.partitions[index+self.cell_count-1], glm::Vec2::zeros()));  
                         }
                     }
                     if x_i < self.cell_count - 1 { // Right
-                        other_partitions.push(&self.partitions[index+1]); 
+                        other_partitions.push((&self.partitions[index+1], glm::Vec2::zeros())); 
 
                         if y_i >= 1 { // Bottom Right
-                            other_partitions.push(&self.partitions[index-self.cell_count+1]);  
+                            other_partitions.push((&self.partitions[index-self.cell_count+1], glm::Vec2::zeros()));  
                         }
                         if y_i < self.cell_count - 1 { // Top Right
-                            other_partitions.push(&self.partitions[index+self.cell_count+1]);  
+                            other_partitions.push((&self.partitions[index+self.cell_count+1], glm::Vec2::zeros()));  
                         }
                     }
                     if y_i >= 1 { // Bottom
-                        other_partitions.push(&self.partitions[index-self.cell_count]);  
+                        other_partitions.push((&self.partitions[index-self.cell_count], glm::Vec2::zeros()));  
                     }
                     if y_i < self.cell_count - 1 { // Top
-                        other_partitions.push(&self.partitions[index+self.cell_count]);  
+                        other_partitions.push((&self.partitions[index+self.cell_count], glm::Vec2::zeros()));  
                     }
                 }
                 ParticleWrapping::Wrap => {
-                    /*
                     fn to_id(x: usize, y: usize, w: usize) -> usize {
                         y * w + x
                     }
-                    fn wrap(i: i32, max: usize) -> usize {
+                    fn wrap(i: i32, max: usize) -> (usize, bool) {
                         if i < 0 {
-                            (max as i32 + i) as usize
+                            ((max as i32 + i) as usize+1, true)
                         }
                         else if i as usize > max {
-                            i as usize - max
+                            (i as usize - max - 1, true)
                         } else {
-                            i as usize
+                            (i as usize, false)
                         }
                     }
 
                     let y = index / self.cell_count;
                     let x = index - y * self.cell_count;
-                    let w = self.cell_count-1;
 
-                    
-                    println!("Partition:\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}\nx: {}, y: {}",
-                        x, y,
-                        wrap(x as i32 - 1, w), y,
-                        wrap(x as i32 - 1, w), wrap(y as i32 - 1, w),
-                        wrap(x as i32 - 1, w), wrap(y as i32 + 1, w),
-                        wrap(x as i32 + 1, w), y,
-                        wrap(x as i32 + 1, w), wrap(y as i32 - 1, w),
-                        wrap(x as i32 + 1, w), wrap(y as i32 + 1, w),
-                        x, wrap(y as i32 + 1, w),
-                        x, wrap(y as i32 - 1, w),
-                    );
-                    */
-                    /*
+                    let w = self.cell_count;
+                    let w_max = w-1;
+
+                    let size = self.size * 2.0;
+
                     // Left
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), y, w)]); 
+                    let (p_x, wrapped) = wrap(x as i32 - 1, w_max);
+                    let offset = glm::Vec2::new(-size * wrapped as i32 as f32, 0.0);
+                    other_partitions.push((&self.partitions[to_id(p_x, y, w)], offset)); 
+                    
                     // Bottom Left
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 - 1, w), w)]);  
+                    let (p_x, wrapped_x) = wrap(x as i32 - 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y as i32 + 1, w_max);
+                    let offset = glm::Vec2::new(-size * wrapped_x as i32 as f32, size * wrapped_y as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
+
                     // Top Left
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 - 1, w), wrap(y as i32 + 1, w), w)]);  
-
+                    let (p_x, wrapped_x) = wrap(x as i32 - 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y as i32 - 1, w_max);
+                    let offset = glm::Vec2::new(-size * wrapped_x as i32 as f32, -size * wrapped_y as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
+                    
                     // Right
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), y, w)]); 
+                    let (p_x, wrapped) = wrap(x as i32 + 1, w_max);
+                    let offset = glm::Vec2::new(size * wrapped as i32 as f32, 0.0);
+                    other_partitions.push((&self.partitions[to_id(p_x, y, w)], offset)); 
+                    
                     // Bottom Right
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 - 1, w), w)]);  
+                    let (p_x, wrapped_x) = wrap(x as i32 + 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y as i32 + 1, w_max);
+                    let offset = glm::Vec2::new(size * wrapped_x as i32 as f32, size * wrapped_y as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
+                
                     // Top Right
-                    other_partitions.push(&self.partitions[to_id(wrap(x as i32 + 1, w), wrap(y as i32 + 1, w), w)]);  
-
+                    let (p_x, wrapped_x) = wrap(x as i32 + 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y as i32 - 1, w_max);
+                    let offset = glm::Vec2::new(size * wrapped_x as i32 as f32, -size * wrapped_y as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
+                    
                     // Bottom
-                    other_partitions.push(&self.partitions[to_id(x, wrap(y as i32 + 1, w), w)]);  
+                    let (p_y, wrapped) = wrap(y as i32 + 1, w_max);
+                    let offset = glm::Vec2::new(0.0, size * wrapped as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(x, p_y, w)], offset)); 
+                    
                     // Top
-                    other_partitions.push(&self.partitions[to_id(x, wrap(y as i32 - 1, w), w)]);  
-                    */
+                    let (p_y, wrapped) = wrap(y as i32 - 1, w_max);
+                    let offset = glm::Vec2::new(0.0, -size * wrapped as i32 as f32);
+                    other_partitions.push((&self.partitions[to_id(x, p_y, w)], offset));   
                 }
             }
-
-            // Maybe this approach would be better? https://stackoverflow.com/questions/71182117/change-elements-in-vector-using-multithreading-in-rust
-            // Split the workload (particle vector) to smaller vectors and move them to their respective threads
-            // After the work is done, retrieve the particles and copy them to the original vector
-            // 'crossbeam' crate will be really helpful with its scoped threads
 
             for &index in &partition.particles {
                 let particle = &mut particles_mut[index];
 
                 particle.velocity *= drag.powf(delta_time);
 
-                for &other_partition in &other_partitions{
+                for &(other_partition, offset) in &other_partitions{
                     for other in other_partition.particles.iter().map(|&other_index| &self.particles[other_index]) {
-                        let diff: glm::Vec2 = other.position - particle.position;
+                        let diff: glm::Vec2 = (other.position+offset) - particle.position;
                         let dist: f32 = (diff.x*diff.x+diff.y*diff.y).sqrt();
     
                         if dist == 0.0 {
@@ -226,16 +234,16 @@ impl World {
 
             match particle_settings.wrapping {
                 ParticleWrapping::Wrap => {
-                    if particle.position.x >= self.size-0.1 {
-                        particle.position.x = -self.size+0.1;
-                    } if particle.position.x <= -self.size+0.1 {
-                        particle.position.x = self.size-0.1;
+                    if particle.position.x > self.size-0.1 {
+                        particle.position.x = -self.size+0.2;
+                    } if particle.position.x < -self.size+0.1 {
+                        particle.position.x = self.size-0.2;
                     }
 
-                    if particle.position.y >= self.size-0.1 {
-                        particle.position.y = -self.size+0.1;
-                    } if particle.position.y <= -self.size+0.1 {
-                        particle.position.y = self.size-0.1;
+                    if particle.position.y > self.size-0.1 {
+                        particle.position.y = -self.size+0.2;
+                    } if particle.position.y < -self.size+0.1 {
+                        particle.position.y = self.size-0.2;
                     }
                 }
                 ParticleWrapping::Barrier => {
