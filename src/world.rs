@@ -249,6 +249,11 @@ impl World {
     }
 
     pub fn new_partitions(&mut self, world_size: f32, cell_size: f32) {
+
+        // The cell size always has to be equal or greater to particle_max_r (Max influnce radius of a particle)
+        let cell_count_floor = (world_size * 2.0 / cell_size).floor() as usize;
+        let cell_size = world_size*2.0 / cell_count_floor as f32;
+
         let cell_count = (world_size * 2.0 / cell_size).ceil() as usize;
 
         self.size = world_size;

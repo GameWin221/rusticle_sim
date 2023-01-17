@@ -49,8 +49,8 @@ impl GUI {
             .show(&self.platform.context(), |ui| {
                 ui.heading("Physics");
 
-                *max_r_changed = ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r..=1000.0).text("Max r")).changed();
-                ui.add(egui::Slider::new(&mut particle_settings.min_r, 0.0..=particle_settings.max_r).text("Min r"));
+                *max_r_changed = ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r+0.1..=1000.0).text("Max r")).changed();
+                ui.add(egui::Slider::new(&mut particle_settings.min_r, 10.0..=particle_settings.max_r-0.1).text("Min r"));
                 ui.add(egui::Slider::new(&mut particle_settings.force, 0.0..=10.0).text("Force"));
                 ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(2).text("x^6 Drag"));
 
