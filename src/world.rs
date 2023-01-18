@@ -7,6 +7,7 @@ use crate::{
 };
 
 const DEFAULT_NUM_PARTICLES_PER_CELL: usize = 256;
+const BARRIER_MARGIN: f32 = 0.1;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct PartitionCell {
@@ -54,6 +55,10 @@ impl World {
         }
     }
 
+    pub fn get_world_size(&self) -> f32 {
+        self.size
+    }
+
     pub fn get_particles(&self) -> &Vec<Particle> {
         &self.particles
     }
@@ -66,8 +71,8 @@ impl World {
         self.particles = (0..particle_count).map(|_| {
             Particle::new(
                 glm::Vec2::new(
-                    rand::thread_rng().gen_range(-self.size+0.1..=self.size-0.1),
-                    rand::thread_rng().gen_range(-self.size+0.1..=self.size-0.1)
+                    rand::thread_rng().gen_range(-self.size+BARRIER_MARGIN..=self.size-BARRIER_MARGIN),
+                    rand::thread_rng().gen_range(-self.size+BARRIER_MARGIN..=self.size-BARRIER_MARGIN)
                 ), 
                 rand::thread_rng().gen_range(0..color_count as u8)
             )
@@ -234,21 +239,21 @@ impl World {
 
             match particle_settings.wrapping {
                 ParticleWrapping::Wrap => {
-                    if particle.position.x > self.size-0.1 {
-                        particle.position.x = -self.size+0.2;
-                    } if particle.position.x < -self.size+0.1 {
+                    if particle.position.x > self.size-BARRIER_MARGIN {
+                        particle.position.x = -self.size+BARRIER_MARGIN*2.0;
+                    } if particle.position.x < -self.size+BARRIER_MARGIN {
                         particle.position.x = self.size-0.2;
                     }
 
-                    if particle.position.y > self.size-0.1 {
-                        particle.position.y = -self.size+0.2;
-                    } if particle.position.y < -self.size+0.1 {
-                        particle.position.y = self.size-0.2;
+                    if particle.position.y > self.size-BARRIER_MARGIN {
+                        particle.position.y = -self.size+BARRIER_MARGIN*2.0;
+                    } if particle.position.y < -self.size+BARRIER_MARGIN {
+                        particle.position.y = self.size-BARRIER_MARGIN*2.0;
                     }
                 }
                 ParticleWrapping::Barrier => {
-                    particle.position.x = particle.position.x.clamp(-self.size+0.1, self.size-0.1);
-                    particle.position.y = particle.position.y.clamp(-self.size+0.1, self.size-0.1);
+                    particle.position.x = particle.position.x.clamp(-self.size+BARRIER_MARGIN, self.size-BARRIER_MARGIN);
+                    particle.position.y = particle.position.y.clamp(-self.size+BARRIER_MARGIN, self.size-BARRIER_MARGIN);
                 }
             }
         });
@@ -268,6 +273,20 @@ impl World {
         self.partitions = vec![PartitionCell::new(); cell_count*cell_count];
         self.cell_count = cell_count;
         self.cell_size = cell_size;
+
+        self.particles.iter_mut().for_each(|particle| {
+            if particle.position.x > self.size-BARRIER_MARGIN {
+                particle.position.x = -self.size+BARRIER_MARGIN*2.0;
+            } if particle.position.x < -self.size+BARRIER_MARGIN {
+                particle.position.x = self.size-0.2;
+            }
+
+            if particle.position.y > self.size-BARRIER_MARGIN {
+                particle.position.y = -self.size+BARRIER_MARGIN*2.0;
+            } if particle.position.y < -self.size+BARRIER_MARGIN {
+                particle.position.y = self.size-BARRIER_MARGIN*2.0;
+            }
+        });
 
         println!("Creating a world with size: {}x{} and {}x{} partitions (each {}x{})", self.size*2.0, self.size*2.0, self.cell_count, self.cell_count, cell_size, cell_size);
     }

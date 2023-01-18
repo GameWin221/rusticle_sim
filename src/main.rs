@@ -1,5 +1,7 @@
 extern crate nalgebra_glm as glm;
 
+use rand::{rngs::StdRng, Rng, SeedableRng, distributions::uniform::{SampleUniform, SampleRange}};
+
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -26,12 +28,26 @@ use camera::Camera;
 use renderer::{Renderer, MAX_INSTANCES, MAX_COLORS};
 use controller::{Controller, Key, Button};
 
+pub fn random_range_seeded<T: SampleUniform, R: SampleRange<T>>(range: R, seed: &str) -> T {
+    assert!(seed.len() <= 32);
+
+    let mut bytes_vec: Vec<u8> = seed.bytes().collect();
+    bytes_vec.resize(32, 0);
+
+    let bytes = bytes_vec.try_into().unwrap();
+    
+    let mut rng = StdRng::from_seed(bytes);
+
+    rng.gen_range(range)
+}
+
 struct Game {
     renderer: Renderer,
     camera: Camera,
     controller: Controller,
 
-    delta_time: f32,
+    time_step: f32,
+    fixed_time_step: bool,
     last_frame_time: std::time::SystemTime,
 
     //particles: Vec<Particle>,
@@ -100,7 +116,8 @@ impl Game {
             camera,
             controller,
 
-            delta_time: 0.0,
+            time_step: 0.0,
+            fixed_time_step: false,
             last_frame_time: std::time::SystemTime::now(),
 
             world,
@@ -127,22 +144,27 @@ impl Game {
     }
 
     fn update(&mut self) {
-        self.delta_time = self.last_frame_time.elapsed().unwrap().as_secs_f32();
+        let delta_time = self.last_frame_time.elapsed().unwrap().as_secs_f32();
+
+        if !self.fixed_time_step {
+            self.time_step = delta_time;
+        }
+
         self.last_frame_time = std::time::SystemTime::now();
 
         self.camera.zoom(self.controller.mouse_wheel * 0.025);
 
         if let Some(followed_index) = self.followed_index {
-            self.camera.move_towards(3.0 * self.delta_time, self.world.get_particle(followed_index).position);
+            self.camera.move_towards(3.0 * delta_time, self.world.get_particle(followed_index).position);
         } else {
             let camera_direction = glm::Vec2::new(
                 self.controller.get_axis(Key::A, Key::D),
                 self.controller.get_axis(Key::S, Key::W),
             );
     
-            self.camera.move_xy(camera_direction * 400.0 * self.delta_time);
+            self.camera.move_xy(camera_direction * 400.0 * delta_time);
         }
-        
+
         if self.controller.is_key_pressed(Key::R) {
             self.world.new_particles(self.color_table.colors.len(), self.particle_settings.max_particles);
         }
@@ -162,7 +184,7 @@ impl Game {
 
         self.world.update_partitions();
 
-        self.world.update_particles(self.delta_time, &self.particle_settings, &self.color_table);
+        self.world.update_particles(self.time_step, &self.particle_settings, &self.color_table);
 
         if self.controller.is_button_pressed(Button::Left) && self.controller.is_key_down(Key::LShift) {
             let ndc: glm::Vec2 = glm::Vec2::new(
@@ -192,23 +214,43 @@ impl Game {
         let frame_data = if self.show_ui {
             let mut max_r_changed = false;
             let mut colors_changed = false;
+            let mut world_size_changed = false;
+
+            let mut should_reset_particles = false;
+            let mut should_reset_color_table = false;
+
+            let mut world_size = self.world.get_world_size();
 
             let data = gui.draw_ui(
                 &mut self.particle_settings,
                 &mut self.color_table,
                 &mut max_r_changed,
+                &mut world_size_changed,
                 &mut colors_changed,
+                &mut self.fixed_time_step,
+                &mut should_reset_particles,
+                &mut should_reset_color_table,
+                &mut self.time_step,
+                &mut world_size,
                 self.world.velocity_update_time,
                 self.world.position_update_time,
                 self.world.partition_update_time,
                 self.renderer.gpu_time
             );
 
-            if max_r_changed {
-                self.world.new_partitions(2500.0, self.particle_settings.max_r);
+            if max_r_changed || world_size_changed {
+                self.world.new_partitions(world_size, self.particle_settings.max_r);
             }
             if colors_changed {
                 self.renderer.update_colors(&self.color_table.colors);
+            }
+
+            if should_reset_particles {
+                self.world.new_particles(self.color_table.colors.len(), self.particle_settings.max_particles);
+            }
+
+            if should_reset_color_table {
+                self.color_table.new_table();
             }
 
             data
@@ -222,6 +264,8 @@ impl Game {
             self.particle_settings.radius,
             frame_data,
         );
+
+        self.renderer.reset_queue();
 
         result
     }

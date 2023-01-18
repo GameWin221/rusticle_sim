@@ -362,10 +362,10 @@ impl Renderer {
     }
 
     pub fn render(&mut self, proj_view: glm::Mat4, particle_sharpness: f32, particle_radius: f32, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
-        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
-
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default()); 
+
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
@@ -441,8 +441,6 @@ impl Renderer {
         }
 
         self.gpu_time = start.elapsed().as_secs_f32()*1000.0;
-
-        self.reset_queue();
 
         Ok(())
     }

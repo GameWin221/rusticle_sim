@@ -36,7 +36,13 @@ impl GUI {
         particle_settings: &mut ParticleSettings,
         color_table: &mut ColorTable,
         max_r_changed: &mut bool,
+        world_size_changed: &mut bool,
         colors_changed: &mut bool,
+        fixed_time_step: &mut bool,
+        should_reset_particles: &mut bool,
+        should_reset_color_table: &mut bool,
+        time_step: &mut f32,
+        world_size: &mut f32,
         velocity_update_time: f32,
         position_update_time: f32,
         partition_update_time: f32,
@@ -58,6 +64,31 @@ impl GUI {
                     *particle_settings = ParticleSettings::default();
                     *max_r_changed = true;
                 }
+
+                ui.separator();
+
+                ui.checkbox(fixed_time_step, "Fixed time step");
+                ui.label("Will stabilise the simulation for lower FPS");
+
+                if *fixed_time_step {
+                    ui.add(egui::Slider::new(time_step, 0.0..=0.1).text("[s/tick] Time Step").fixed_decimals(3).step_by(0.002));
+                }
+
+                ui.separator();
+
+                ui.label("World size:");
+
+                ui.horizontal(|ui| {
+                    if ui.add(egui::DragValue::new(world_size).clamp_range(1000.0..=5000.0)).changed() {
+                        *world_size_changed = true;
+                    }
+                    ui.label("x");
+
+                    if ui.add(egui::DragValue::new(world_size).clamp_range(1000.0..=5000.0)).changed() {
+                        *world_size_changed = true;
+                    }
+                });
+                
 
                 ui.separator();
 
@@ -126,6 +157,13 @@ impl GUI {
                 ui.add(egui::Slider::new(&mut particle_settings.radius, 1.0..=60.0).text("Radius"));
                 ui.add(egui::Slider::new(&mut particle_settings.sharpness, 0.0..=0.999).text("Sharpness"));
                 //ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(8).text("Drag"));
+
+                ui.separator();
+
+                ui.heading("Control");
+
+                *should_reset_particles = ui.button("Regenerate particles").clicked();
+                *should_reset_color_table = ui.button("Regenerate color table").clicked();
             });
 
         egui::Window::new(String::from("Metrics"))
