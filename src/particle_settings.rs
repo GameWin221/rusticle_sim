@@ -1,11 +1,13 @@
-#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParticleWrapping {
     #[default]
     Barrier,
     Wrap,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParticleSettings {
     pub max_particles: usize,
 

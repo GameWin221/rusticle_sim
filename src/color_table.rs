@@ -1,5 +1,4 @@
 use rand::Rng;
-
 pub struct ColorTable {
     pub colors: Vec<glm::Vec3>,
     pub table: Vec<Vec<f32>>,

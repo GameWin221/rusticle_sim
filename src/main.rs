@@ -17,6 +17,8 @@ mod renderer;
 mod controller;
 mod world;
 
+mod saver;
+
 mod particle_settings;
 mod color_table;
 
@@ -180,6 +182,14 @@ impl Game {
             } else {
                 ParticleWrapping::Barrier
             }
+        }
+
+        if self.controller.is_key_pressed(Key::I) {
+            saver::save_color_table(&self.color_table, "colortable".to_string()).unwrap();
+            saver::save_particle_settings(&self.particle_settings, "particlesettings".to_string()).unwrap();
+        } else if self.controller.is_key_pressed(Key::O) {
+            self.color_table = saver::read_color_table("colortable".to_string()).unwrap();
+            self.particle_settings = saver::read_particle_settings("particlesettings".to_string()).unwrap();
         }
 
         self.world.update_partitions();

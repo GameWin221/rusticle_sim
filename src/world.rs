@@ -92,8 +92,7 @@ impl World {
         let min_r_norm = particle_settings.min_r / particle_settings.max_r;
  
         self.partitions.par_iter().enumerate().for_each(|(index, partition)|{
-            unsafe {
-            let particles_mut = &mut*(particles_vec_addr as *mut Vec<Particle>);
+            let particles_mut = unsafe { &mut*(particles_vec_addr as *mut Vec<Particle>) }; // Shhh
 
             let mut other_partitions = Vec::with_capacity(9);
             other_partitions.push((partition, glm::Vec2::zeros()));
@@ -227,7 +226,7 @@ impl World {
                         }
                     }
                 }
-            }}
+            }
         });
 
         self.velocity_update_time = start.elapsed().as_secs_f32()*1000.0;

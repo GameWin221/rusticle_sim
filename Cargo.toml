@@ -9,7 +9,6 @@ edition = "2021"
 egui = "0.19"
 egui_wgpu_backend = "0.19"
 egui_winit_platform = "0.16"
-image = "0.23"
 nalgebra-glm = "0.3"
 winit = "0.27.3"
 env_logger = "0.9"
@@ -19,3 +18,5 @@ wgpu = "0.13.1"
 bytemuck = { version = "1.4", features = [ "derive" ] }
 rand = "0.8.5"
 rayon = "1.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
