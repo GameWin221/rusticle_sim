@@ -5,7 +5,8 @@ use egui::{FullOutput, ClippedPrimitive};
 use winit::{window::Window, event::Event};
 
 use crate::color_table::ColorTable;
-use crate::particle_settings::{ParticleSettings, ParticleWrapping};
+use crate::particle_settings::ParticleSettings;
+use crate::world_settings::{WorldSettings, ParticleWrapping};
 
 pub struct GUI {
     platform: Platform,
@@ -33,6 +34,7 @@ impl GUI {
     }
 
     pub fn draw_ui(&mut self, 
+        world_settings: &mut WorldSettings,
         particle_settings: &mut ParticleSettings,
         color_table: &mut ColorTable,
         max_r_changed: &mut bool,
@@ -42,7 +44,6 @@ impl GUI {
         should_reset_particles: &mut bool,
         should_reset_color_table: &mut bool,
         time_step: &mut f32,
-        world_size: &mut f32,
         velocity_update_time: f32,
         position_update_time: f32,
         partition_update_time: f32,
@@ -50,20 +51,20 @@ impl GUI {
     ) -> Option<(FullOutput, Vec<ClippedPrimitive>)> {
         self.platform.begin_frame();
 
-        egui::Window::new(String::from("Particle Settings"))
+        egui::Window::new(String::from("Control Panel"))
             .default_width(420.0)
             .show(&self.platform.context(), |ui| {
-                ui.heading("Physics");
-
-                *max_r_changed = ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r+0.1..=1000.0).text("Max r")).changed();
-                ui.add(egui::Slider::new(&mut particle_settings.min_r, 10.0..=particle_settings.max_r-0.1).text("Min r"));
-                ui.add(egui::Slider::new(&mut particle_settings.force, 0.0..=10.0).text("Force"));
-                ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(2).text("x^6 Drag"));
-
-                if ui.button("Restore defaults").clicked() {
-                    *particle_settings = ParticleSettings::default();
-                    *max_r_changed = true;
-                }
+                ui.collapsing("Particle settings", |ui| {
+                    *max_r_changed = ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r+0.1..=1000.0).text("Max r")).changed();
+                    ui.add(egui::Slider::new(&mut particle_settings.min_r, 10.0..=particle_settings.max_r-0.1).text("Min r"));
+                    ui.add(egui::Slider::new(&mut particle_settings.force, 0.0..=10.0).text("Force"));
+                    ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(2).text("x^6 Drag"));
+    
+                    if ui.button("Restore defaults").clicked() {
+                        *particle_settings = ParticleSettings::default();
+                        *max_r_changed = true;
+                    }
+                });
 
                 ui.separator();
 
@@ -76,94 +77,99 @@ impl GUI {
 
                 ui.separator();
 
-                ui.label("World size:");
+                ui.collapsing("World Settings", |ui| {
+                    ui.label("Seed:");
 
-                ui.horizontal(|ui| {
-                    if ui.add(egui::DragValue::new(world_size).clamp_range(1000.0..=5000.0)).changed() {
-                        *world_size_changed = true;
-                    }
-                    ui.label("x");
+                    ui.text_edit_singleline(&mut world_settings.seed);
 
-                    if ui.add(egui::DragValue::new(world_size).clamp_range(1000.0..=5000.0)).changed() {
-                        *world_size_changed = true;
-                    }
-                });
-                
-
-                ui.separator();
-
-                ui.heading("Wrapping");
-
-                ui.horizontal(|ui| {
-                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
-                    ui.radio_value(&mut particle_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
-                });
-
-                ui.separator();
-
-                ui.heading("Color Table");
-
-                ui.horizontal(|ui| {
-                    if ui.button("   Flip   ").clicked() {
-                        let color_count = color_table.colors.len();
-
-                        for y in 0..color_count {
-                            for x in 0..=y {
-                                let tmp = color_table.table[y][x];
-                                color_table.table[y][x] = color_table.table[color_count-1-y][color_count-1-x];
-                                color_table.table[color_count-1-y][color_count-1-x] = tmp;
-                            }
-                        }
-                    }
-
-                    for (y_index, _) in color_table.table.iter_mut().enumerate() {
+                    ui.add_space(5.0);
                     
-                        let color = &mut color_table.colors[y_index];
-
-                        let mut rgb = [color.x, color.y, color.z];
-
-                        if ui.color_edit_button_rgb(&mut rgb).changed() {
-                            *colors_changed = true;
-                        }
-                        
-                        *color = glm::Vec3::from(rgb);
-
-                        continue;
-                    }
-                });
-                for (y_index, row) in color_table.table.iter_mut().enumerate() {
+                    ui.label("Size:");
                     ui.horizontal(|ui| {
-                        let color = &mut color_table.colors[y_index];
-
-                        let mut rgb = [color.x, color.y, color.z];
-
-                        if ui.color_edit_button_rgb(&mut rgb).changed() {
-                            *colors_changed = true;
+                        if ui.add(egui::DragValue::new(&mut world_settings.size).clamp_range(1000.0..=10000.0)).changed() {
+                            *world_size_changed = true;
                         }
-                        
-                        *color = glm::Vec3::from(rgb);
-
-                        for value in row.iter_mut() {
-                            //*value = 0.0;
-                            ui.add(egui::DragValue::new(value).clamp_range(-1.0..=1.0).speed(0.1).fixed_decimals(2));
+                        ui.label("x");
+    
+                        if ui.add(egui::DragValue::new(&mut world_settings.size).clamp_range(1000.0..=10000.0)).changed() {
+                            *world_size_changed = true;
                         }
                     });
-                }
+
+                    ui.add_space(5.0);
+
+                    ui.label("Wrapping:");
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut world_settings.wrapping, ParticleWrapping::Barrier, "Barrier");
+                        ui.radio_value(&mut world_settings.wrapping, ParticleWrapping::Wrap, "Wrap");
+                    });
+
+                    ui.add_space(5.0);
+
+                    if ui.button("Restore defaults").clicked() {
+                        *world_settings = WorldSettings::default();
+                        *world_size_changed = true;
+                        *should_reset_particles = true;
+                    }
+                });
 
                 ui.separator();
 
-                ui.heading("Rendering");
-
-                ui.add(egui::Slider::new(&mut particle_settings.radius, 1.0..=60.0).text("Radius"));
-                ui.add(egui::Slider::new(&mut particle_settings.sharpness, 0.0..=0.999).text("Sharpness"));
-                //ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(8).text("Drag"));
+                ui.collapsing("Color Table", |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button("   Flip   ").clicked() {
+                            let color_count = color_table.colors.len();
+    
+                            for y in 0..color_count {
+                                for x in 0..=y {
+                                    let tmp = color_table.table[y][x];
+                                    color_table.table[y][x] = color_table.table[color_count-1-y][color_count-1-x];
+                                    color_table.table[color_count-1-y][color_count-1-x] = tmp;
+                                }
+                            }
+                        }
+    
+                        for (y_index, _) in color_table.table.iter_mut().enumerate() {
+                        
+                            let color = &mut color_table.colors[y_index];
+    
+                            let mut rgb = [color.x, color.y, color.z];
+    
+                            if ui.color_edit_button_rgb(&mut rgb).changed() {
+                                *colors_changed = true;
+                            }
+                            
+                            *color = glm::Vec3::from(rgb);
+    
+                            continue;
+                        }
+                    });
+                    for (y_index, row) in color_table.table.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            let color = &mut color_table.colors[y_index];
+    
+                            let mut rgb = [color.x, color.y, color.z];
+    
+                            if ui.color_edit_button_rgb(&mut rgb).changed() {
+                                *colors_changed = true;
+                            }
+                            
+                            *color = glm::Vec3::from(rgb);
+    
+                            for value in row.iter_mut() {
+                                //*value = 0.0;
+                                ui.add(egui::DragValue::new(value).clamp_range(-1.0..=1.0).speed(0.1).fixed_decimals(2));
+                            }
+                        });
+                    }
+                });
 
                 ui.separator();
 
-                ui.heading("Control");
-
-                *should_reset_particles = ui.button("Regenerate particles").clicked();
-                *should_reset_color_table = ui.button("Regenerate color table").clicked();
+                ui.collapsing("Rendering", |ui| {
+                    ui.add(egui::Slider::new(&mut particle_settings.radius, 1.0..=60.0).text("Particle Radius"));
+                    ui.add(egui::Slider::new(&mut particle_settings.sharpness, 0.0..=0.999).text("Particle Sharpness"));
+                });
             });
 
         egui::Window::new(String::from("Metrics"))

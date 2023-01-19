@@ -1,7 +1,5 @@
 extern crate nalgebra_glm as glm;
 
-use rand::{rngs::StdRng, Rng, SeedableRng, distributions::uniform::{SampleUniform, SampleRange}};
-
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -19,29 +17,18 @@ mod world;
 
 mod saver;
 
+mod world_settings;
 mod particle_settings;
 mod color_table;
 
+use world_settings::{WorldSettings, ParticleWrapping};
 use world::World;
-use particle_settings::{ParticleSettings, ParticleWrapping};
+use particle_settings::ParticleSettings;
 use color_table::ColorTable;
 use gui::GUI;
 use camera::Camera;
 use renderer::{Renderer, MAX_INSTANCES, MAX_COLORS};
 use controller::{Controller, Key, Button};
-
-pub fn random_range_seeded<T: SampleUniform, R: SampleRange<T>>(range: R, seed: &str) -> T {
-    assert!(seed.len() <= 32);
-
-    let mut bytes_vec: Vec<u8> = seed.bytes().collect();
-    bytes_vec.resize(32, 0);
-
-    let bytes = bytes_vec.try_into().unwrap();
-    
-    let mut rng = StdRng::from_seed(bytes);
-
-    rng.gen_range(range)
-}
 
 struct Game {
     renderer: Renderer,
@@ -54,6 +41,7 @@ struct Game {
 
     //particles: Vec<Particle>,
     world: World,
+    world_settings: WorldSettings, 
     particle_settings: ParticleSettings, 
     color_table: ColorTable, 
 
@@ -101,15 +89,20 @@ impl Game {
 
         let color_table = ColorTable::new(pallettes[3].clone());
 
-        let particle_settings = ParticleSettings {
+        let world_settings = WorldSettings {
             max_particles: 4096*2,
+            size: 5000.0,
+            ..Default::default()
+        };
+
+        let particle_settings = ParticleSettings {
             ..Default::default()
         };
 
         assert!(color_table.colors.len() < MAX_COLORS);
-        assert!(particle_settings.max_particles < MAX_INSTANCES);
+        assert!(world_settings.max_particles < MAX_INSTANCES);
 
-        let world = World::new(2500.0, particle_settings.max_r);
+        let world = World::new(&world_settings, &particle_settings);
 
         let renderer = Renderer::new(window, &color_table.colors).await;
     
@@ -123,6 +116,7 @@ impl Game {
             last_frame_time: std::time::SystemTime::now(),
 
             world,
+            world_settings,
             particle_settings,
             color_table,
 
@@ -168,7 +162,8 @@ impl Game {
         }
 
         if self.controller.is_key_pressed(Key::R) {
-            self.world.new_particles(self.color_table.colors.len(), self.particle_settings.max_particles);
+            self.world_settings.new_random_seed();
+            self.world.new_particles(&self.world_settings, &self.color_table);
         }
         if self.controller.is_key_pressed(Key::T) {
             self.color_table.new_table();
@@ -177,7 +172,7 @@ impl Game {
             self.show_ui = !self.show_ui;
         }
         if self.controller.is_key_pressed(Key::U) {
-            self.particle_settings.wrapping = if self.particle_settings.wrapping == ParticleWrapping::Barrier {
+            self.world_settings.wrapping = if self.world_settings.wrapping == ParticleWrapping::Barrier {
                 ParticleWrapping::Wrap
             } else {
                 ParticleWrapping::Barrier
@@ -187,14 +182,19 @@ impl Game {
         if self.controller.is_key_pressed(Key::I) {
             saver::save_color_table(&self.color_table, "colortable".to_string()).unwrap();
             saver::save_particle_settings(&self.particle_settings, "particlesettings".to_string()).unwrap();
+            saver::save_world_settings(&self.world_settings, "worldsettings".to_string()).unwrap();
         } else if self.controller.is_key_pressed(Key::O) {
             self.color_table = saver::read_color_table("colortable".to_string()).unwrap();
             self.particle_settings = saver::read_particle_settings("particlesettings".to_string()).unwrap();
+            self.world_settings = saver::read_world_settings("worldsettings".to_string()).unwrap();
+
+            self.world.new_partitions(&self.world_settings, &self.particle_settings);
+            self.world.new_particles(&self.world_settings, &self.color_table);
         }
 
         self.world.update_partitions();
 
-        self.world.update_particles(self.time_step, &self.particle_settings, &self.color_table);
+        self.world.update_particles(self.time_step, &self.particle_settings, &self.world_settings, &self.color_table);
 
         if self.controller.is_button_pressed(Button::Left) && self.controller.is_key_down(Key::LShift) {
             let ndc: glm::Vec2 = glm::Vec2::new(
@@ -229,9 +229,8 @@ impl Game {
             let mut should_reset_particles = false;
             let mut should_reset_color_table = false;
 
-            let mut world_size = self.world.get_world_size();
-
             let data = gui.draw_ui(
+                &mut self.world_settings,
                 &mut self.particle_settings,
                 &mut self.color_table,
                 &mut max_r_changed,
@@ -241,7 +240,6 @@ impl Game {
                 &mut should_reset_particles,
                 &mut should_reset_color_table,
                 &mut self.time_step,
-                &mut world_size,
                 self.world.velocity_update_time,
                 self.world.position_update_time,
                 self.world.partition_update_time,
@@ -249,14 +247,14 @@ impl Game {
             );
 
             if max_r_changed || world_size_changed {
-                self.world.new_partitions(world_size, self.particle_settings.max_r);
+                self.world.new_partitions(&self.world_settings, &self.particle_settings);
             }
             if colors_changed {
                 self.renderer.update_colors(&self.color_table.colors);
             }
 
             if should_reset_particles {
-                self.world.new_particles(self.color_table.colors.len(), self.particle_settings.max_particles);
+                self.world.new_particles(&self.world_settings, &self.color_table);
             }
 
             if should_reset_color_table {
@@ -297,7 +295,7 @@ async fn run() {
 
     event_loop.run(move |event, _, control_flow| {
         gui.handle_event(&event);
-
+        
         match event {
             Event::RedrawRequested(window_id) if window_id == window.id() => {
                 game.update();

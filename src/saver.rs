@@ -1,5 +1,6 @@
 use crate::color_table::ColorTable;
 use crate::particle_settings::ParticleSettings;
+use crate::world_settings::WorldSettings;
 
 use serde::{Serialize, Deserialize};
 
@@ -12,30 +13,42 @@ struct ColorTableProxy {
     pub table: Vec<Vec<f32>>,
 }
 
-pub fn save_particle_settings(particle_settings: &ParticleSettings, name: String) -> std::io::Result<()> {
-    let serialized = serde_json::to_string(&particle_settings)?;
-
-    let mut path = String::from("saved/");
-    path.push_str(name.as_str());
-    path.push_str(".json");
-
-    let mut file = File::create(path)?;
-
-    file.write(serialized.as_bytes())?;
-
-    Ok(())
-}
-
-pub fn read_particle_settings(name: String) -> std::io::Result<ParticleSettings> {
+fn read_file(name: &String) -> std::io::Result<String> {
     let mut path = String::from("saved/");
     path.push_str(name.as_str());
     path.push_str(".json");
 
     let mut file = File::open(path)?;
 
-    let mut serialized = String::new();
+    let mut contents = String::new();
 
-    file.read_to_string(&mut serialized)?;
+    file.read_to_string(&mut contents)?;
+
+    Ok(contents)
+}
+
+fn save_file(data: &String, name: &String) -> std::io::Result<()> {
+    let mut path = String::from("saved/");
+    path.push_str(name.as_str());
+    path.push_str(".json");
+
+    let mut file = File::create(path)?;
+
+    file.write(data.as_bytes())?;
+
+    Ok(())
+}
+
+pub fn save_particle_settings(particle_settings: &ParticleSettings, name: String) -> std::io::Result<()> {
+    let serialized = serde_json::to_string(&particle_settings)?;
+
+    save_file(&serialized, &name)?;
+
+    Ok(())
+}
+
+pub fn read_particle_settings(name: String) -> std::io::Result<ParticleSettings> {
+    let serialized = read_file(&name)?;
 
     let deserialized = serde_json::from_str(&serialized)?;
 
@@ -50,27 +63,13 @@ pub fn save_color_table(color_table: &ColorTable, name: String) -> std::io::Resu
     
     let serialized = serde_json::to_string(&color_table_proxy)?;
 
-    let mut path = String::from("saved/");
-    path.push_str(name.as_str());
-    path.push_str(".json");
-
-    let mut file = File::create(path)?;
-
-    file.write(serialized.as_bytes())?;
+    save_file(&serialized, &name)?;
 
     Ok(())
 }
 
 pub fn read_color_table(name: String) -> std::io::Result<ColorTable> {
-    let mut path = String::from("saved/");
-    path.push_str(name.as_str());
-    path.push_str(".json");
-
-    let mut file = File::open(path)?;
-
-    let mut serialized = String::new();
-
-    file.read_to_string(&mut serialized)?;
+    let serialized = read_file(&name)?;
 
     let deserialized: ColorTableProxy = serde_json::from_str(&serialized)?;
 
@@ -80,4 +79,20 @@ pub fn read_color_table(name: String) -> std::io::Result<ColorTable> {
     };
 
     Ok(color_table)
+}
+
+pub fn save_world_settings(world_settings: &WorldSettings, name: String) -> std::io::Result<()> {
+    let serialized = serde_json::to_string(&world_settings)?;
+
+    save_file(&serialized, &name)?;
+
+    Ok(())
+}
+
+pub fn read_world_settings(name: String) -> std::io::Result<WorldSettings> {
+    let serialized = read_file(&name)?;
+
+    let deserialized = serde_json::from_str(&serialized)?;
+
+    Ok(deserialized)
 }
