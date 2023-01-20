@@ -48,8 +48,6 @@ impl World {
         let cell_size = particle_settings.max_r;
         let cell_count = (size / cell_size).ceil() as usize;
 
-        println!("Creating a world with size: {}x{} and {}x{} partitions (each {}x{})", size, size, cell_count, cell_count, cell_size, cell_size);
-
         Self {
             particles: Vec::new(),
             partitions: vec![PartitionCell::new(); cell_count*cell_count], 
@@ -90,6 +88,12 @@ impl World {
                 r.gen_range(0..color_table.colors.len() as u8)
             )
         }).collect();
+    }
+
+    pub fn clamp_particle_colors(&mut self, color_table: &ColorTable) {
+        self.particles.iter_mut().for_each(|particle|{
+            particle.color_id = particle.color_id.min((color_table.colors.len() - 1) as u8);
+        })
     }
 
     pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings, world_settings: &WorldSettings, color_table: &ColorTable) {
@@ -300,8 +304,6 @@ impl World {
                 particle.position.y = self.half_size-BARRIER_MARGIN*2.0;
             }
         });
-
-        println!("Creating a world with size: {}x{} and {}x{} partitions (each {}x{})", self.size, self.size, self.cell_count, self.cell_count, cell_size, cell_size);
     }
 
     pub fn update_partitions(&mut self) {

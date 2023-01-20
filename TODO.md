@@ -2,15 +2,12 @@
 
 1. Rendering:
     - Bloom https://learnopengl.com/Guest-Articles/2022/Phys.-Based-Bloom
-    - Particles change their radius / color / brightness based on their neighbor count or velocity
+    - Particles change their appearance (radius / color / brightness) based on their activity (neighbor count or velocity)
 
 2. UI
-    - Control buttons
-    - Saving and loading
-    - Better color table and adding colors
-    - Selecting ready presets etc.
+    - Ready presets for color table and other settings
 
-3. Regenerate the simulation on loading
+3. Make code more readable and clean
 
 # Problems:
-### MULTITHREADING DOESN'T GIVE AS MUCH BENEFITS AS IT SHOULD - USE A THREADPOOL
+### MULTITHREADING DOESN'T GIVE AS MUCH BENEFITS AS IT SHOULD - MAYBE USE A THREADPOOL? - MAYBE ITS LOCKING THE PARTICLES VECTOR?

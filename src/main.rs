@@ -21,7 +21,7 @@ mod world_settings;
 mod particle_settings;
 mod color_table;
 
-use world_settings::{WorldSettings, ParticleWrapping};
+use world_settings::WorldSettings;
 use world::World;
 use particle_settings::ParticleSettings;
 use color_table::ColorTable;
@@ -39,7 +39,8 @@ struct Game {
     fixed_time_step: bool,
     last_frame_time: std::time::SystemTime,
 
-    //particles: Vec<Particle>,
+    simulate: bool,
+
     world: World,
     world_settings: WorldSettings, 
     particle_settings: ParticleSettings, 
@@ -56,38 +57,16 @@ impl Game {
 
         let camera = Camera::new(1.0..=20.0);
         
-        let pallettes = vec![
-            vec![
-                glm::Vec3::new(1.0, 0.1, 0.1),
-                glm::Vec3::new(0.1, 1.0, 0.1),
-                glm::Vec3::new(0.1, 0.1, 1.0),
-                glm::Vec3::new(0.5, 0.1, 1.0),
-                glm::Vec3::new(1.0, 0.1, 0.5),
-                glm::Vec3::new(1.0, 1.0, 0.1),
-            ],
-            vec![
-                glm::Vec3::new(1.0, 0.0, 0.1),
-                glm::Vec3::new(0.1, 0.0, 1.0),
-            ],
-            vec![
-                glm::Vec3::new(1.0, 0.0, 0.1),
-                glm::Vec3::new(1.0, 0.6, 0.1),
-                glm::Vec3::new(1.0, 0.2, 0.9),
-                glm::Vec3::new(0.1, 0.0, 1.0),
-                glm::Vec3::new(0.1, 0.6, 1.0),
-                glm::Vec3::new(0.5, 0.6, 1.0),
-                glm::Vec3::new(0.1, 1.0, 0.0),
-                glm::Vec3::new(0.1, 1.0, 0.6),
-                glm::Vec3::new(0.85, 1.0, 0.6),
-            ],
-            vec![
-                glm::Vec3::new(1.0, 0.0, 0.1),
-                glm::Vec3::new(0.0, 0.6, 1.0),
-                glm::Vec3::new(0.7, 1.0, 0.1),
-            ],
+        let colors = vec![
+            glm::Vec3::new(1.0, 0.1, 0.1),
+            glm::Vec3::new(0.1, 1.0, 0.1),
+            glm::Vec3::new(0.1, 0.1, 1.0),
+            glm::Vec3::new(0.5, 0.1, 1.0),
+            glm::Vec3::new(1.0, 0.1, 0.5),
+            glm::Vec3::new(1.0, 1.0, 0.1),
         ];
 
-        let color_table = ColorTable::new(pallettes[3].clone());
+        let color_table = ColorTable::new(&colors);
 
         let world_settings = WorldSettings {
             max_particles: 4096*2,
@@ -102,7 +81,9 @@ impl Game {
         assert!(color_table.colors.len() < MAX_COLORS);
         assert!(world_settings.max_particles < MAX_INSTANCES);
 
-        let world = World::new(&world_settings, &particle_settings);
+        let mut world = World::new(&world_settings, &particle_settings);
+
+        world.new_particles(&world_settings, &color_table);
 
         let renderer = Renderer::new(window, &color_table.colors).await;
     
@@ -114,6 +95,8 @@ impl Game {
             time_step: 0.0,
             fixed_time_step: false,
             last_frame_time: std::time::SystemTime::now(),
+
+            simulate: true,
 
             world,
             world_settings,
@@ -161,53 +144,29 @@ impl Game {
             self.camera.move_xy(camera_direction * 400.0 * delta_time);
         }
 
-        if self.controller.is_key_pressed(Key::R) {
-            self.world_settings.new_random_seed();
-            self.world.new_particles(&self.world_settings, &self.color_table);
+        if self.simulate {
+            self.world.update_partitions();
+
+            self.world.update_particles(self.time_step, &self.particle_settings, &self.world_settings, &self.color_table);
         }
-        if self.controller.is_key_pressed(Key::T) {
-            self.color_table.new_table();
-        }
-        if self.controller.is_key_pressed(Key::Y) {
-            self.show_ui = !self.show_ui;
-        }
-        if self.controller.is_key_pressed(Key::U) {
-            self.world_settings.wrapping = if self.world_settings.wrapping == ParticleWrapping::Barrier {
-                ParticleWrapping::Wrap
-            } else {
-                ParticleWrapping::Barrier
+
+        if self.controller.is_key_down(Key::LShift) {
+            if self.controller.is_button_pressed(Button::Left) {
+                let ndc: glm::Vec2 = glm::Vec2::new(
+                    self.controller.mouse_position.0 as f32 / self.camera.size.x * 2.0 - 1.0,
+                    (1.0 - self.controller.mouse_position.1 as f32 / self.camera.size.y) * 2.0 - 1.0
+                );
+    
+                if let Some(id) = self.world.get_closest_particle_id(&self.camera.viewport_to_world(ndc)) {
+                    self.followed_index = Some(id);
+                }
+            } else if self.controller.is_button_pressed(Button::Right) {
+                self.followed_index = None;
             }
-        }
 
-        if self.controller.is_key_pressed(Key::I) {
-            saver::save_color_table(&self.color_table, "colortable".to_string()).unwrap();
-            saver::save_particle_settings(&self.particle_settings, "particlesettings".to_string()).unwrap();
-            saver::save_world_settings(&self.world_settings, "worldsettings".to_string()).unwrap();
-        } else if self.controller.is_key_pressed(Key::O) {
-            self.color_table = saver::read_color_table("colortable".to_string()).unwrap();
-            self.particle_settings = saver::read_particle_settings("particlesettings".to_string()).unwrap();
-            self.world_settings = saver::read_world_settings("worldsettings".to_string()).unwrap();
-
-            self.world.new_partitions(&self.world_settings, &self.particle_settings);
-            self.world.new_particles(&self.world_settings, &self.color_table);
-        }
-
-        self.world.update_partitions();
-
-        self.world.update_particles(self.time_step, &self.particle_settings, &self.world_settings, &self.color_table);
-
-        if self.controller.is_button_pressed(Button::Left) && self.controller.is_key_down(Key::LShift) {
-            let ndc: glm::Vec2 = glm::Vec2::new(
-                self.controller.mouse_position.0 as f32 / self.camera.size.x * 2.0 - 1.0,
-                (1.0 - self.controller.mouse_position.1 as f32 / self.camera.size.y) * 2.0 - 1.0
-            );
-
-            if let Some(id) = self.world.get_closest_particle_id(&self.camera.viewport_to_world(ndc)) {
-                self.followed_index = Some(id);
-                println!("Following: {}", self.followed_index.unwrap());
+            if self.controller.is_key_pressed(Key::U) {
+                self.show_ui = !self.show_ui;
             }
-        } else if self.controller.is_button_pressed(Button::Right) {
-            self.followed_index = None;
         }
 
         self.controller.update();
@@ -222,23 +181,19 @@ impl Game {
         }
 
         let frame_data = if self.show_ui {
-            let mut max_r_changed = false;
-            let mut colors_changed = false;
-            let mut world_size_changed = false;
-
-            let mut should_reset_particles = false;
-            let mut should_reset_color_table = false;
+            let mut should_update_world = false;
+            let mut should_update_particles = false;
+            let mut should_update_colors = false;
 
             let data = gui.draw_ui(
                 &mut self.world_settings,
                 &mut self.particle_settings,
                 &mut self.color_table,
-                &mut max_r_changed,
-                &mut world_size_changed,
-                &mut colors_changed,
                 &mut self.fixed_time_step,
-                &mut should_reset_particles,
-                &mut should_reset_color_table,
+                &mut should_update_world,
+                &mut should_update_particles,
+                &mut should_update_colors,
+                &mut self.simulate,
                 &mut self.time_step,
                 self.world.velocity_update_time,
                 self.world.position_update_time,
@@ -246,20 +201,17 @@ impl Game {
                 self.renderer.gpu_time
             );
 
-            if max_r_changed || world_size_changed {
+            if should_update_world {
                 self.world.new_partitions(&self.world_settings, &self.particle_settings);
             }
-            if colors_changed {
+            if should_update_colors {
+                self.world.clamp_particle_colors(&self.color_table);
                 self.renderer.update_colors(&self.color_table.colors);
             }
-
-            if should_reset_particles {
+            if should_update_particles {
                 self.world.new_particles(&self.world_settings, &self.color_table);
             }
 
-            if should_reset_color_table {
-                self.color_table.new_table();
-            }
 
             data
         } else {
@@ -267,6 +219,7 @@ impl Game {
         };
 
         let result = self.renderer.render(
+            &self.world_settings.bg_color,
             self.camera.calc_matrices(),
             self.particle_settings.sharpness,
             self.particle_settings.radius,

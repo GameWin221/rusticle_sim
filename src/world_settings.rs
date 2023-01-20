@@ -13,6 +13,7 @@ pub struct WorldSettings {
     pub size: f32,
     pub wrapping: ParticleWrapping,
     pub seed: String,
+    pub bg_color: [f32; 3],
 }
 
 impl WorldSettings {
@@ -36,6 +37,7 @@ impl Default for WorldSettings {
             size: 5000.0,
             wrapping: ParticleWrapping::Wrap,
             seed: Self::random_seed(),
+            bg_color: [0.0, 0.0, 0.0]
         }
     }
 }

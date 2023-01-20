@@ -31,8 +31,8 @@ const INDICES: &[u32] = &[
     3, 1, 2,
 ];
 
-pub const MAX_INSTANCES: usize = 4096*8;//4096;
-pub const MAX_COLORS: usize = 32;
+pub const MAX_INSTANCES: usize = 50_000;
+pub const MAX_COLORS: usize = 50;
 
 impl Vertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -361,7 +361,13 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, proj_view: glm::Mat4, particle_sharpness: f32, particle_radius: f32, frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, 
+        clear_color: &[f32; 3],
+        proj_view: glm::Mat4, 
+        particle_sharpness: f32, 
+        particle_radius: f32, 
+        frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default()); 
 
@@ -379,9 +385,9 @@ impl Renderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
+                            r: clear_color[0] as f64,
+                            g: clear_color[1] as f64,
+                            b: clear_color[2] as f64,
                             a: 1.0,
                         }),
                         store: true,
