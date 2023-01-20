@@ -172,7 +172,9 @@ impl GUI {
                 ui.separator();
 
                 ui.collapsing("Particle settings", |ui| {
-                    *should_update_world = ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r+0.1..=1000.0).text("Max influence radius")).changed();
+                    if ui.add(egui::Slider::new(&mut particle_settings.max_r, particle_settings.min_r+0.1..=1000.0).text("Max influence radius")).changed() {
+                        *should_update_world = true;
+                    }
                     ui.add(egui::Slider::new(&mut particle_settings.min_r, 10.0..=particle_settings.max_r-0.1).text("Min influence radius"));
                     ui.add(egui::Slider::new(&mut particle_settings.force, 0.0..=10.0).text("Atraction force"));
                     ui.add(egui::Slider::new(&mut particle_settings.drag, 0.0..=1.0).fixed_decimals(2).text("Velocity over time"));
