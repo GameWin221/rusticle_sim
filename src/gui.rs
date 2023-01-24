@@ -20,6 +20,8 @@ pub struct GUI {
     world_settings_failed: bool,
     color_table_failed: bool,
     particle_settings_failed: bool,
+
+    color_table_fill_val: f32,
 }
 
 impl GUI {
@@ -37,13 +39,14 @@ impl GUI {
         Self {
             platform,
 
-            world_settings_name: String::from("Save Name"),
-            color_table_name: String::from("Save Name"),
-            particle_settings_name: String::from("Save Name"),
+            world_settings_name: String::from("Save file name"),
+            color_table_name: String::from("Save file name"),
+            particle_settings_name: String::from("Save file name"),
 
             world_settings_failed: false,
             color_table_failed: false,
             particle_settings_failed: false,
+            color_table_fill_val: 0.0,
         }
     }
 
@@ -79,7 +82,7 @@ impl GUI {
                     *should_update_particles = true;
                 }
                 if ui.button("Randomize Color Table").clicked() {
-                    color_table.new_table();
+                    color_table.new_random_table();
                 }
 
                 ui.separator();
@@ -279,8 +282,16 @@ impl GUI {
                     ui.separator();
 
                     if ui.button("Randomize").clicked() {
-                        color_table.new_table();
+                        color_table.new_random_table();
                     }
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Fill").clicked() {
+                            color_table.new_filled_table(self.color_table_fill_val);
+                        }
+    
+                        ui.add(egui::Slider::new(&mut self.color_table_fill_val, -1.0..=1.0).text("Value").fixed_decimals(2).step_by(0.01));
+                    });
 
                     ui.separator();
 
@@ -311,6 +322,7 @@ impl GUI {
                 ui.collapsing("Rendering", |ui| {
                     ui.add(egui::Slider::new(&mut particle_settings.radius, 1.0..=60.0).text("Particle Radius"));
                     ui.add(egui::Slider::new(&mut particle_settings.sharpness, 0.0..=0.999).text("Particle Sharpness"));
+                    ui.add(egui::Slider::new(&mut particle_settings.bloom, 0.0..=10.0).text("Particle Bloom"));
                 });
 
                 ui.separator();

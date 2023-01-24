@@ -129,7 +129,6 @@ impl Controller {
                 delta,
                 ..
             } => {
-
                 match delta {
                     MouseScrollDelta::LineDelta(_, y) => {
                         self.mouse_wheel = *y;

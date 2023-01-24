@@ -9,6 +9,7 @@ pub struct ParticleSettings {
 
     pub radius: f32,
     pub sharpness: f32,
+    pub bloom: f32,
 }
 
 impl Default for ParticleSettings {
@@ -20,6 +21,7 @@ impl Default for ParticleSettings {
             drag: 0.06813,
             radius: 20.0,
             sharpness: 0.8,
+            bloom: 8.0,
         }
     }
 }

@@ -12,6 +12,7 @@ struct PushConstants{
     proj_view: [[f32; 4]; 4],
     particle_sharpness: f32,
     particle_radius: f32,
+    bloom: f32,
 }
 
 #[repr(C)]
@@ -52,7 +53,7 @@ impl Vertex {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable, Default)]
 struct ColorRaw {
     color: [f32; 4],
 }
@@ -271,12 +272,11 @@ impl Renderer {
             }
         );
 
-        let mut colors_data = vec![ColorRaw{color: [0.0; 4]}; MAX_COLORS];
+        let mut colors_data: Vec<ColorRaw> = colors.iter().map(|&c|{
+            ColorRaw{color: [c.x, c.y, c.z, 0.0]}
+        }).collect();
 
-        for i in 0..colors.len() {
-            let c = colors[i];
-            colors_data[i] = ColorRaw{color: [c.x, c.y, c.z, 0.0]};
-        }
+        colors_data.resize(MAX_COLORS, ColorRaw::default());
 
         let colors_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -336,12 +336,11 @@ impl Renderer {
     }
  
     pub fn update_colors(&mut self, colors: &Vec<glm::Vec3>) {
-        let mut colors_data = vec![ColorRaw{color: [0.0; 4]}; MAX_COLORS];
+        let mut colors_data: Vec<ColorRaw> = colors.iter().map(|&c|{
+            ColorRaw{color: [c.x, c.y, c.z, 0.0]}
+        }).collect();
 
-        for i in 0..colors.len() {
-            let c = colors[i];
-            colors_data[i] = ColorRaw{color: [c.x, c.y, c.z, 0.0]};
-        }
+        colors_data.resize(MAX_COLORS, ColorRaw::default());
 
         let encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("update_colors_encoder"),
@@ -366,6 +365,7 @@ impl Renderer {
         proj_view: glm::Mat4, 
         particle_sharpness: f32, 
         particle_radius: f32, 
+        bloom: f32,
         frame_data: Option<(FullOutput, Vec<ClippedPrimitive>)>
     ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -400,14 +400,15 @@ impl Renderer {
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_bind_group(0, &self.colors_bind_group, &[]);
-
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32); 
+
+            render_pass.set_bind_group(0, &self.colors_bind_group, &[]);
             
             render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{
                 proj_view: proj_view.into(),
                 particle_sharpness,
-                particle_radius
+                particle_radius,
+                bloom: bloom + 1.0
             }));
 
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..self.instances.len() as u32);

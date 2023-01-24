@@ -223,6 +223,7 @@ impl Game {
             self.camera.calc_matrices(),
             self.particle_settings.sharpness,
             self.particle_settings.radius,
+            self.particle_settings.bloom,
             frame_data,
         );
 

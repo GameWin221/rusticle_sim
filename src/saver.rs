@@ -16,7 +16,10 @@ struct ColorTableProxy {
 fn read_file(name: &String) -> std::io::Result<String> {
     let mut path = String::from("saved/");
     path.push_str(name.as_str());
-    path.push_str(".json");
+
+    if !path.contains(".json") {
+        path.push_str(".json");
+    }
 
     let mut file = File::open(path)?;
 
@@ -36,7 +39,10 @@ fn save_file(data: &String, name: &String) -> std::io::Result<()> {
     
     let mut path = String::from("saved/");
     path.push_str(name.as_str());
-    path.push_str(".json");
+
+    if !path.contains(".json") {
+        path.push_str(".json");
+    }
 
     let mut file = File::create(path)?;
 
@@ -62,6 +68,7 @@ pub fn read_particle_settings(name: &String) -> std::io::Result<ParticleSettings
 }
 
 pub fn save_color_table(color_table: &ColorTable, name: &String) -> std::io::Result<()> {
+    // Serde cant serialize glm::Vec3 so I have to convert those Vec3s to [f32; 3]
     let color_table_proxy = ColorTableProxy {
         colors: color_table.colors.iter().map(|&c| c.into()).collect(),
         table: color_table.table.clone(),

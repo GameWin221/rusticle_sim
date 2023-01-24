@@ -10,11 +10,11 @@ impl ColorTable {
 
         Self {
             colors: color_palette.clone(),
-            table: Self::gen_new_table(color_count)
+            table: Self::gen_random_table(color_count)
         }
     }
 
-    fn gen_new_table(color_count: usize) -> Vec<Vec<f32>> {
+    fn gen_random_table(color_count: usize) -> Vec<Vec<f32>> {
         (0..color_count).map(|_| {
             (0..color_count).map(|_| {
                 rand::thread_rng().gen_range(-1.0..=1.0)
@@ -22,8 +22,19 @@ impl ColorTable {
         }).collect()
     }
 
-    pub fn new_table(&mut self) {
-        self.table = Self::gen_new_table(self.colors.len());
+    fn gen_filled_table(color_count: usize, fill: f32) -> Vec<Vec<f32>> {
+        (0..color_count).map(|_| {
+            (0..color_count).map(|_| {
+                fill
+            }).collect()
+        }).collect()
+    }
+
+    pub fn new_random_table(&mut self) {
+        self.table = Self::gen_random_table(self.colors.len());
+    }
+    pub fn new_filled_table(&mut self, fill: f32) {
+        self.table = Self::gen_filled_table(self.colors.len(), fill);
     }
 
     pub fn add_color(&mut self) {

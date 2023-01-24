@@ -108,6 +108,7 @@ impl World {
 
         let min_r_norm = particle_settings.min_r / particle_settings.max_r;
  
+        // par_iter() from rayon
         self.partitions.par_iter().enumerate().for_each(|(index, partition)|{
             let particles_mut = unsafe { &mut*(particles_vec_addr as *mut Vec<Particle>) }; // Shhh
 
@@ -117,6 +118,10 @@ impl World {
             let y_i = index / self.cell_count;
             let x_i = index - y_i * self.cell_count;
 
+            let w = self.cell_count;
+            let w_max = w-1;
+
+            // Get neighbors
             match world_settings.wrapping {
                 ParticleWrapping::Barrier => {
                     if x_i >= 1 { // Left
@@ -161,55 +166,49 @@ impl World {
                         }
                     }
 
-                    let y = index / self.cell_count;
-                    let x = index - y * self.cell_count;
-
-                    let w = self.cell_count;
-                    let w_max = w-1;
-
                     // Left
-                    let (p_x, wrapped) = wrap(x as i32 - 1, w_max);
+                    let (p_x, wrapped) = wrap(x_i as i32 - 1, w_max);
                     let offset = glm::Vec2::new(-self.size * wrapped as i32 as f32, 0.0);
-                    other_partitions.push((&self.partitions[to_id(p_x, y, w)], offset)); 
+                    other_partitions.push((&self.partitions[to_id(p_x, y_i, w)], offset)); 
                     
                     // Bottom Left
-                    let (p_x, wrapped_x) = wrap(x as i32 - 1, w_max);
-                    let (p_y, wrapped_y) = wrap(y as i32 + 1, w_max);
+                    let (p_x, wrapped_x) = wrap(x_i as i32 - 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y_i as i32 + 1, w_max);
                     let offset = glm::Vec2::new(-self.size * wrapped_x as i32 as f32, self.size * wrapped_y as i32 as f32);
                     other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
 
                     // Top Left
-                    let (p_x, wrapped_x) = wrap(x as i32 - 1, w_max);
-                    let (p_y, wrapped_y) = wrap(y as i32 - 1, w_max);
+                    let (p_x, wrapped_x) = wrap(x_i as i32 - 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y_i as i32 - 1, w_max);
                     let offset = glm::Vec2::new(-self.size * wrapped_x as i32 as f32, -self.size * wrapped_y as i32 as f32);
                     other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
                     
                     // Right
-                    let (p_x, wrapped) = wrap(x as i32 + 1, w_max);
+                    let (p_x, wrapped) = wrap(x_i as i32 + 1, w_max);
                     let offset = glm::Vec2::new(self.size * wrapped as i32 as f32, 0.0);
-                    other_partitions.push((&self.partitions[to_id(p_x, y, w)], offset)); 
+                    other_partitions.push((&self.partitions[to_id(p_x, y_i, w)], offset)); 
                     
                     // Bottom Right
-                    let (p_x, wrapped_x) = wrap(x as i32 + 1, w_max);
-                    let (p_y, wrapped_y) = wrap(y as i32 + 1, w_max);
+                    let (p_x, wrapped_x) = wrap(x_i as i32 + 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y_i as i32 + 1, w_max);
                     let offset = glm::Vec2::new(self.size * wrapped_x as i32 as f32, self.size * wrapped_y as i32 as f32);
                     other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
                 
                     // Top Right
-                    let (p_x, wrapped_x) = wrap(x as i32 + 1, w_max);
-                    let (p_y, wrapped_y) = wrap(y as i32 - 1, w_max);
+                    let (p_x, wrapped_x) = wrap(x_i as i32 + 1, w_max);
+                    let (p_y, wrapped_y) = wrap(y_i as i32 - 1, w_max);
                     let offset = glm::Vec2::new(self.size * wrapped_x as i32 as f32, -self.size * wrapped_y as i32 as f32);
                     other_partitions.push((&self.partitions[to_id(p_x, p_y, w)], offset)); 
                     
                     // Bottom
-                    let (p_y, wrapped) = wrap(y as i32 + 1, w_max);
+                    let (p_y, wrapped) = wrap(y_i as i32 + 1, w_max);
                     let offset = glm::Vec2::new(0.0, self.size * wrapped as i32 as f32);
-                    other_partitions.push((&self.partitions[to_id(x, p_y, w)], offset)); 
+                    other_partitions.push((&self.partitions[to_id(x_i, p_y, w)], offset)); 
                     
                     // Top
-                    let (p_y, wrapped) = wrap(y as i32 - 1, w_max);
+                    let (p_y, wrapped) = wrap(y_i as i32 - 1, w_max);
                     let offset = glm::Vec2::new(0.0, -self.size * wrapped as i32 as f32);
-                    other_partitions.push((&self.partitions[to_id(x, p_y, w)], offset));   
+                    other_partitions.push((&self.partitions[to_id(x_i, p_y, w)], offset));   
                 }
             }
 
