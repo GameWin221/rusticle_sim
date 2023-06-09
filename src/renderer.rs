@@ -188,7 +188,7 @@ impl Renderer {
         });
 
         let push_constant_range = wgpu::PushConstantRange {
-            stages: wgpu::ShaderStages::VERTEX,
+            stages: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
             range: 0..std::mem::size_of::<PushConstants>() as u32,
         };
 
@@ -404,7 +404,7 @@ impl Renderer {
 
             render_pass.set_bind_group(0, &self.colors_bind_group, &[]);
             
-            render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&PushConstants{
+            render_pass.set_push_constants(wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT, 0, bytemuck::bytes_of(&PushConstants{
                 proj_view: proj_view.into(),
                 particle_sharpness,
                 particle_radius,
