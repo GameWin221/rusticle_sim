@@ -8,7 +8,6 @@ use winit::{
     dpi::LogicalSize
 };
 
-mod particle;
 mod gui;
 mod camera;
 mod renderer;
@@ -134,7 +133,7 @@ impl Game {
         self.camera.zoom(self.controller.mouse_wheel * 0.025);
 
         if let Some(followed_index) = self.followed_index {
-            self.camera.move_towards(3.0 * delta_time, self.world.get_particle(followed_index).position);
+            self.camera.move_towards(3.0 * delta_time, self.world.get_particle_position(followed_index));
         } else {
             let camera_direction = glm::Vec2::new(
                 self.controller.get_axis(Key::A, Key::D),
@@ -173,10 +172,10 @@ impl Game {
     }
 
     fn render(&mut self, gui: &mut GUI) -> Result<(), wgpu::SurfaceError> {
-        for particle in self.world.get_particles() {
+        for (&position, &color_id) in self.world.get_particle_positions().iter().zip(self.world.get_particle_color_ids().iter()) {
             self.renderer.enqueue_instance(renderer::Instance {
-                position: particle.position,
-                color_id: particle.color_id as u32
+                position: position,
+                color_id: color_id as u32
             });
         }
 

@@ -1,4 +1,4 @@
-use winit::{event::{VirtualKeyCode, MouseButton, WindowEvent, KeyboardInput, ElementState, MouseScrollDelta}};
+use winit::event::{VirtualKeyCode, MouseButton, WindowEvent, KeyboardInput, ElementState, MouseScrollDelta};
 use std::collections::HashMap;
 
 pub type Key = VirtualKeyCode;
