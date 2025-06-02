@@ -1,9 +1,6 @@
 use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
-
 use rayon::prelude::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator};
-
 use rand::{rngs::StdRng, Rng, SeedableRng};
-
 use crate::{
     particle_settings::ParticleSettings,
     world_settings::{WorldSettings, ParticleWrapping},
@@ -111,13 +108,13 @@ impl World {
     pub fn update_particles(&mut self, delta_time: f32, particle_settings: &ParticleSettings, world_settings: &WorldSettings, color_table: &ColorTable) {
         let start = std::time::Instant::now();
 
-        let particle_positions_vec_ptr: *const Vec<glm::Vec2> = &self.particle_positions;
+        let particle_positions_vec_ptr: *mut Vec<glm::Vec2> = &mut self.particle_positions;
         let particle_positions_vec_addr = particle_positions_vec_ptr as usize;
 
-        let particle_velocities_vec_ptr: *const Vec<glm::Vec2> = &self.particle_velocities;
+        let particle_velocities_vec_ptr: *mut Vec<glm::Vec2> = &mut self.particle_velocities;
         let particle_velocities_vec_addr = particle_velocities_vec_ptr as usize;
 
-        let particle_color_ids_vec_ptr: *const Vec<u8> = &self.particle_color_ids;
+        let particle_color_ids_vec_ptr: *mut Vec<u8> = &mut self.particle_color_ids;
         let particle_color_ids_vec_addr = particle_color_ids_vec_ptr as usize;
 
         let particle_speed = 75.0 * particle_settings.force * delta_time;
@@ -131,7 +128,7 @@ impl World {
             let particle_positions_mut = unsafe { &mut*(particle_positions_vec_addr as *mut Vec<glm::Vec2>) }; // Shhh
             let particle_velocities_mut = unsafe { &mut*(particle_velocities_vec_addr as *mut Vec<glm::Vec2>) }; // Shhh
             let particle_color_ids_mut = unsafe { &mut*(particle_color_ids_vec_addr as *mut Vec<u8>) }; // Shhh
-
+            
             let mut other_partitions = Vec::with_capacity(9);
             other_partitions.push((partition, glm::Vec2::zeros()));
             
@@ -248,16 +245,19 @@ impl World {
                         flt = flt.sqrt();
                         vec = vec / flt * particle_speed;
                         
+                        let accel_multiplier;
                         // https://www.desmos.com/calculator/xjmwts0q8l
                         if flt > particle_settings.min_r {
                             let c = color_table.table[particle_color_ids_mut[index] as usize][particle_color_ids_mut[other_index] as usize];
                             // Old equation was removed because it was too costly: ((PI*(dist - particle_settings.min_r)) / (particle_settings.max_r - particle_settings.min_r)).sin();
                             let v = 1.0 - (1.0 + min_r_norm - 2.0 * (flt/particle_settings.max_r).min(1.0)).abs() / (1.0 - min_r_norm);
                             
-                            particle_velocities_mut[index] += vec * c * v;
+                            accel_multiplier = c * v;
                         } else {
-                            particle_velocities_mut[index] += vec * (flt / particle_settings.min_r - 1.0);
+                            accel_multiplier = flt / particle_settings.min_r - 1.0;
                         }
+
+                        particle_velocities_mut[index] += vec * accel_multiplier;
                     }
                 }
             }
@@ -273,27 +273,29 @@ impl World {
             self.particle_positions[i] += self.particle_velocities[i] * delta_time;
         }
 
-        self.particle_positions.iter_mut().for_each(|position| {
-            match world_settings.wrapping {
-                ParticleWrapping::Wrap => {
+        match world_settings.wrapping {
+            ParticleWrapping::Wrap => {
+                self.particle_positions.iter_mut().for_each(|position| {
                     if position.x > barrier-BARRIER_MARGIN {
                         position.x = -barrier+BARRIER_MARGIN*2.0;
                     } if position.x < -barrier+BARRIER_MARGIN {
-                        position.x = barrier-0.2;
+                        position.x = barrier-BARRIER_MARGIN*2.0;
                     }
-
+    
                     if position.y > barrier-BARRIER_MARGIN {
                         position.y = -barrier+BARRIER_MARGIN*2.0;
                     } if position.y < -barrier+BARRIER_MARGIN {
                         position.y = barrier-BARRIER_MARGIN*2.0;
                     }
-                }
-                ParticleWrapping::Barrier => {
+                });
+            }
+            ParticleWrapping::Barrier => {
+                self.particle_positions.iter_mut().for_each(|position| {
                     position.x = position.x.clamp(-barrier+BARRIER_MARGIN, barrier-BARRIER_MARGIN);
                     position.y = position.y.clamp(-barrier+BARRIER_MARGIN, barrier-BARRIER_MARGIN);
-                }
+                });
             }
-        });
+        }
 
         self.position_update_time = start.elapsed().as_secs_f32()*1000.0;
     }
